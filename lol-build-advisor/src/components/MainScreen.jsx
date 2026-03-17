@@ -6,6 +6,7 @@ import { CoachingPanel } from './CoachingPanel'
 import { KillBar } from './KillBar'
 import { MatchupTip } from './MatchupTip'
 import { MacroAdvice } from './MacroAdvice'
+import { RuleAlerts } from './RuleAlerts'
 import { Clock, Eye, MapPin, Loader2, AlertTriangle, Target } from 'lucide-react'
 
 const POSITIONS = [
@@ -130,7 +131,7 @@ function ObjectivesPanel({ objectives }) {
   )
 }
 
-export function MainScreen({ data, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, coaching, coachingLoading, substituteError, matchupTip, macroAdvice, macroLoading, compact, objectivesStatus }) {
+export function MainScreen({ data, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, coaching, coachingLoading, substituteError, matchupTip, macroAdvice, macroLoading, compact, objectivesStatus, ruleAlerts }) {
   const { players, gameData: gd, activePlayer, myTeamSide, ddragon, ended, isSpectator, allPlayers } = data
   const { me, allies, enemies } = players || {}
   const gameTime = gd?.gameTime || 0
@@ -222,6 +223,9 @@ export function MainScreen({ data, coreBuild, aiSuggestion, aiLoading, positionS
           aiLoading={aiLoading}
           compact={false}
         />
+
+        {/* ルールベースアラート */}
+        <RuleAlerts alerts={ruleAlerts} />
 
         {/* マクロアドバイス（常に表示） */}
         <MacroAdvice advice={macroAdvice} loading={macroLoading} />

@@ -17,6 +17,7 @@ export function useGameData() {
   const [macroAdvice, setMacroAdvice] = useState(null)
   const [macroLoading, setMacroLoading] = useState(false)
   const [objectivesStatus, setObjectivesStatus] = useState(null)
+  const [ruleAlerts, setRuleAlerts] = useState([])
 
   useEffect(() => {
     if (!window.electronAPI) return
@@ -55,9 +56,10 @@ export function useGameData() {
       window.electronAPI.onMacroAdvice?.(setMacroAdvice),
       window.electronAPI.onMacroLoading?.(setMacroLoading),
       window.electronAPI.onObjectivesStatus?.(setObjectivesStatus),
+      window.electronAPI.onRuleAlerts?.(setRuleAlerts),
     ]
     return () => unsubs.forEach(fn => fn?.())
   }, [])
 
-  return { status, gameData, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, champSelectTeam, coaching, coachingLoading, substituteError, matchupTip, champSelectExtras, macroAdvice, macroLoading, objectivesStatus }
+  return { status, gameData, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, champSelectTeam, coaching, coachingLoading, substituteError, matchupTip, champSelectExtras, macroAdvice, macroLoading, objectivesStatus, ruleAlerts }
 }

@@ -122,6 +122,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('objectives:status', handler)
   },
 
+  // ルールベースアラート
+  onRuleAlerts: (cb) => {
+    const handler = (_, alerts) => cb(alerts)
+    ipcRenderer.on('rule:alerts', handler)
+    return () => ipcRenderer.removeListener('rule:alerts', handler)
+  },
+
   // コンパクトビュー
   toggleCompactView: () => ipcRenderer.invoke('compact:toggle'),
   getCompactStatus: () => ipcRenderer.invoke('compact:status'),
@@ -143,4 +150,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ゲームログ
   openGameLogFolder: () => ipcRenderer.invoke('gamelog:openFolder'),
+
+  // ライセンス管理
+  getLicenseStatus: () => ipcRenderer.invoke('license:status'),
+  verifyLicense: (key) => ipcRenderer.invoke('license:verify', key),
+  clearLicense: () => ipcRenderer.invoke('license:clear'),
+
+  // プロバイダー切替 (Ollama / Anthropic)
+  setOllamaProvider: (opts) => ipcRenderer.invoke('provider:set-ollama', opts),
+  setAnthropicProvider: (key) => ipcRenderer.invoke('provider:set-anthropic', key),
+  getProvider: () => ipcRenderer.invoke('provider:get'),
+  ollamaModels: (baseUrl) => ipcRenderer.invoke('ollama:models', baseUrl),
+  ollamaValidate: (opts) => ipcRenderer.invoke('ollama:validate', opts),
 })

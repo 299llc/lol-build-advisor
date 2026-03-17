@@ -4,9 +4,11 @@
  * OP.GG のコアビルドと入れ替え候補アイテム一覧を提示し、
  * この試合でおすすめのアイテムを候補の中から選ばせる。
  *
- * プロバイダー抽象化: AnthropicProvider (BYOK) / BedrockProvider (AWS) を切り替え可能
+ * プロバイダー抽象化: AnthropicProvider (BYOK) / BedrockProvider (AWS) / OllamaProvider (ローカルLLM) を切り替え可能
  */
 const { ITEM_PROMPT, MATCHUP_PROMPT, MACRO_PROMPT, COACHING_PROMPT } = require('../core/prompts')
+const { LOCAL_ITEM_PROMPT, LOCAL_MATCHUP_PROMPT, LOCAL_MACRO_PROMPT, LOCAL_COACHING_PROMPT } = require('../core/localPrompts')
+const { buildKnowledgeContext } = require('../core/knowledgeDb')
 const { AnthropicProvider } = require('./providers/anthropicProvider')
 
 const MODEL_HAIKU = 'claude-haiku-4-5-20251001'
@@ -30,15 +32,21 @@ class ClaudeApiClient {
     this.logs = []
     this.recommendationHistory = {}
     this.totalCalls = 0
+    // ローカルLLM用: ポジション情報
+    this.position = null
+    this.gameTimeSec = 0
   }
 
   setCoreBuild(coreBuild) { this.coreBuild = coreBuild }
   setSubstituteItems(items) { this.substituteItems = items || [] }
   setMatchContext(staticContext) { this.matchContext = staticContext }
+  setPosition(position) { this.position = position }
+  setGameTime(sec) { this.gameTimeSec = sec }
   getSubstituteItems() { return this.substituteItems }
   getLogs() { return this.logs }
   clearLogs() { this.logs = [] }
   getProviderType() { return this.provider?.type || 'unknown' }
+  isLocalLLM() { return this.provider?.type === 'ollama' }
 
   clearMatch() {
     this.matchContext = null
@@ -47,6 +55,8 @@ class ClaudeApiClient {
     this.substituteItems = []
     this.recommendationHistory = {}
     this.totalCalls = 0
+    this.position = null
+    this.gameTimeSec = 0
   }
 
   // 共通API呼び出し (プロバイダー経由)
@@ -146,24 +156,36 @@ class ClaudeApiClient {
 
   async getSuggestion(dynamicContext) {
     const userMessage = this._buildUserMessage(dynamicContext)
+    const isLocal = this.isLocalLLM()
 
     const messages = []
-    if (this.matchContext) {
+    if (!isLocal && this.matchContext) {
       messages.push(
         { role: 'user', content: [{ type: 'text', text: this.matchContext, cache_control: { type: 'ephemeral' } }] },
         { role: 'assistant', content: '了解' },
         { role: 'user', content: userMessage }
       )
     } else {
-      messages.push({ role: 'user', content: userMessage })
+      // ローカルLLM: マルチターンを避け、1メッセージにまとめる
+      const parts = []
+      if (this.matchContext) parts.push(this.matchContext)
+      if (isLocal) {
+        const knowledge = buildKnowledgeContext(this.position || 'MID', this.gameTimeSec)
+        if (knowledge) parts.push(knowledge)
+      }
+      parts.push(userMessage)
+      messages.push({ role: 'user', content: parts.join('\n\n') })
     }
+
+    const systemPrompt = isLocal ? LOCAL_ITEM_PROMPT : ITEM_PROMPT
 
     const aiResult = await this._callApi({
       model: MODEL_HAIKU,
-      maxTokens: 600,
-      system: [{ type: 'text', text: ITEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      maxTokens: isLocal ? 400 : 600,
+      temperature: isLocal ? 0.7 : 0,
+      system: isLocal ? systemPrompt : [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages,
-      timeoutMs: 30000,
+      timeoutMs: isLocal ? 60000 : 30000,
       logType: 'suggestion'
     })
 
@@ -192,45 +214,67 @@ class ClaudeApiClient {
   }
 
   async getMatchupTip(matchupContext) {
+    const isLocal = this.isLocalLLM()
+    let userContent = matchupContext
+    if (isLocal) {
+      const knowledge = buildKnowledgeContext(this.position || 'MID', 0)
+      userContent = knowledge ? `${knowledge}\n\n${matchupContext}` : matchupContext
+    }
     return this._callApi({
       model: MODEL_HAIKU,
-      maxTokens: 700,
-      system: MATCHUP_PROMPT,
-      messages: [{ role: 'user', content: matchupContext }],
-      timeoutMs: 20000,
+      maxTokens: isLocal ? 500 : 700,
+      temperature: isLocal ? 0.7 : 0,
+      system: isLocal ? LOCAL_MATCHUP_PROMPT : MATCHUP_PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+      timeoutMs: isLocal ? 60000 : 20000,
       logType: 'matchup'
     })
   }
 
   async getMacroAdvice(staticContext, dynamicContext) {
+    const isLocal = this.isLocalLLM()
+
     const messages = []
-    if (staticContext) {
+    if (!isLocal && staticContext) {
       messages.push(
         { role: 'user', content: [{ type: 'text', text: staticContext, cache_control: { type: 'ephemeral' } }] },
         { role: 'assistant', content: '了解。リアルタイムの試合状況を送ってください。' },
         { role: 'user', content: dynamicContext }
       )
     } else {
-      messages.push({ role: 'user', content: dynamicContext })
+      // ローカルLLM: 1メッセージにまとめる
+      const parts = []
+      if (staticContext) parts.push(staticContext)
+      if (isLocal) {
+        const knowledge = buildKnowledgeContext(this.position || 'MID', this.gameTimeSec)
+        if (knowledge) parts.push(knowledge)
+      }
+      parts.push(dynamicContext)
+      messages.push({ role: 'user', content: parts.join('\n\n') })
     }
+
+    const systemPrompt = isLocal ? LOCAL_MACRO_PROMPT : MACRO_PROMPT
 
     return this._callApi({
       model: MODEL_HAIKU,
-      maxTokens: 500,
-      system: [{ type: 'text', text: MACRO_PROMPT, cache_control: { type: 'ephemeral' } }],
+      maxTokens: isLocal ? 300 : 500,
+      temperature: isLocal ? 0.7 : 0,
+      system: isLocal ? systemPrompt : [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages,
-      timeoutMs: 20000,
+      timeoutMs: isLocal ? 60000 : 20000,
       logType: 'macro'
     })
   }
 
   async getCoaching(gameContext) {
+    const isLocal = this.isLocalLLM()
     return this._callApi({
-      model: MODEL_HAIKU,
-      maxTokens: 4000,
-      system: COACHING_PROMPT,
+      model: isLocal ? MODEL_HAIKU : MODEL_HAIKU,
+      maxTokens: isLocal ? 2000 : 4000,
+      temperature: isLocal ? 0.7 : 0,
+      system: isLocal ? LOCAL_COACHING_PROMPT : COACHING_PROMPT,
       messages: [{ role: 'user', content: gameContext }],
-      timeoutMs: 60000,
+      timeoutMs: isLocal ? 120000 : 60000,
       logType: 'coaching'
     })
   }

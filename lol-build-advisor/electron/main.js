@@ -3,12 +3,15 @@ const path = require('path')
 const fs = require('fs')
 const { LiveClientPoller } = require('./api/liveClient')
 const { ClaudeApiClient } = require('./api/claudeApi')
+const { OllamaProvider } = require('./api/providers/ollamaProvider')
+const { LicenseManager } = require('./api/licenseManager')
 const { ContextBuilder, extractEnName } = require('./api/contextBuilder')
 const { DiffDetector } = require('./api/diffDetector')
 const { setCacheDir, initPatchData, getVersion, getChampionById, getItemById, getSpells, loadSpellsForMatch, refreshCache, formatItemSummary } = require('./api/patchData')
 const { fetchChampionBuild, buildCoreBuildIds, fetchMatchupItems } = require('./api/opggClient')
 const { LcuClient } = require('./api/lcuClient')
 const { detectFlags } = require('./core/championAnalysis')
+const { RuleEngine } = require('./core/ruleEngine')
 const { buildMacroStaticContext, buildMacroDynamicContext, getObjectivesSummary, getObjectiveTimers } = require('./core/objectiveTracker')
 const { MACRO_INTERVAL_MS, MACRO_DEBOUNCE_MS, COUNTER_ITEMS, ITEM_COMPLETE_GOLD, ITEM_BOOT_GOLD, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS, isCompletedItem, classifyObjectiveEvents } = require('./core/config')
 const { SessionRecorder } = require('./core/sessionRecorder')
@@ -78,6 +81,11 @@ const state = {
   // ポジション
   manualPosition: null,
   positionSelectSent: false,
+
+  // ルールエンジン
+  ruleEngine: null,
+  // ライセンス
+  licenseManager: null,
 
   // 観戦
   spectatorSelectedName: null,
@@ -321,6 +329,54 @@ function setupIPC() {
     return client.validate()
   })
 
+  // ── ローカル LLM (Ollama) プロバイダー ──
+  ipcMain.handle('provider:set-ollama', async (_, opts) => {
+    // opts: { baseUrl?, model? }
+    const provider = new OllamaProvider(opts || {})
+    const ok = await provider.validate()
+    if (!ok) return { success: false, error: 'Ollama に接続できません。ollama が起動しているか確認してください。' }
+    state.claudeClient = new ClaudeApiClient(provider)
+    saveSetting('provider', { type: 'ollama', baseUrl: provider.baseUrl, model: provider.defaultModel })
+    return { success: true, model: provider.defaultModel || 'auto' }
+  })
+
+  ipcMain.handle('provider:set-anthropic', async (_, key) => {
+    fs.writeFileSync(keyPath, key, 'utf-8')
+    state.claudeClient = new ClaudeApiClient(key)
+    saveSetting('provider', { type: 'anthropic' })
+    return { success: true }
+  })
+
+  ipcMain.handle('provider:get', () => {
+    const settings = loadSettings()
+    return settings.provider || { type: 'anthropic' }
+  })
+
+  ipcMain.handle('ollama:models', async (_, baseUrl) => {
+    const provider = new OllamaProvider({ baseUrl })
+    return provider.listModels()
+  })
+
+  ipcMain.handle('ollama:validate', async (_, opts) => {
+    const provider = new OllamaProvider(opts || {})
+    return provider.validate()
+  })
+
+  // ── ライセンス管理 ──
+  ipcMain.handle('license:status', () => {
+    return state.licenseManager?.getStatus() || { tier: 'free', remainingGames: 0 }
+  })
+
+  ipcMain.handle('license:verify', async (_, key) => {
+    if (!state.licenseManager) return { valid: false, error: 'LicenseManager not initialized' }
+    return state.licenseManager.verifyLicense(key)
+  })
+
+  ipcMain.handle('license:clear', () => {
+    state.licenseManager?.clearLicense()
+    return { tier: 'free' }
+  })
+
   ipcMain.handle('polling:start', () => startPolling())
   ipcMain.handle('polling:stop', () => stopPolling())
   ipcMain.handle('ai:toggle', (_, enabled) => { state.aiEnabled = enabled; saveSetting('aiEnabled', enabled); return state.aiEnabled })
@@ -435,6 +491,8 @@ function resetBuildState() {
   state.positionSelectSent = false
   // Claude API client側もクリア
   if (state.claudeClient) state.claudeClient.clearMatch()
+  // ルールエンジンリセット
+  if (state.ruleEngine) state.ruleEngine.reset()
   // Renderer側もクリア
   if (state.mainWindow) {
     state.mainWindow.webContents.send('core:build', null)
@@ -814,6 +872,7 @@ async function startPolling() {
   state.poller = new LiveClientPoller()
   state.contextBuilder = new ContextBuilder()
   state.diffDetector = new DiffDetector()
+  state.ruleEngine = new RuleEngine()
 
   state.pollingInterval = setInterval(async () => {
     try {
@@ -978,6 +1037,12 @@ async function handleGameData(gameData) {
 
   const resolvedPosition = me.position && me.position !== 'NONE' ? me.position : state.manualPosition
 
+  // ローカルLLM用: ポジション・ゲーム時間を設定
+  if (state.claudeClient) {
+    state.claudeClient.setPosition(resolvedPosition)
+    state.claudeClient.setGameTime(gameData.gameData?.gameTime || 0)
+  }
+
   // コアビルド取得
   handleCoreBuild(me, resolvedPosition)
 
@@ -1061,6 +1126,14 @@ async function handleGameData(gameData) {
 
   // マクロアドバイス
   handleMacroAdvice(gameData, me, allies, enemies)
+
+  // ルールベースアラート (LLM不要)
+  if (state.ruleEngine) {
+    const ruleAlerts = state.ruleEngine.evaluate(gameData, resolvedPosition)
+    if (ruleAlerts.length > 0) {
+      broadcast('rule:alerts', ruleAlerts)
+    }
+  }
 
   // スナップショット送信
   const snapshot = {
@@ -1349,11 +1422,23 @@ if (!gotTheLock) {
     createWindow()
     setupIPC()
 
-    const keyPath = path.join(app.getPath('userData'), '.api-key')
-    try {
-      const key = fs.readFileSync(keyPath, 'utf-8')
-      if (key) state.claudeClient = new ClaudeApiClient(key)
-    } catch {}
+    // ライセンスマネージャー初期化
+    // TODO: Gumroad プロダクトID を設定する (商品作成後に変更)
+    state.licenseManager = new LicenseManager(app.getPath('userData'), 'GUMROAD_PRODUCT_ID')
+
+    // プロバイダー復元 (Ollama or Anthropic)
+    const savedProvider = loadSettings().provider
+    if (savedProvider?.type === 'ollama') {
+      const provider = new OllamaProvider({ baseUrl: savedProvider.baseUrl, model: savedProvider.model })
+      state.claudeClient = new ClaudeApiClient(provider)
+      console.log(`[Provider] Restored Ollama (model: ${savedProvider.model || 'auto'})`)
+    } else {
+      const keyPath = path.join(app.getPath('userData'), '.api-key')
+      try {
+        const key = fs.readFileSync(keyPath, 'utf-8')
+        if (key) state.claudeClient = new ClaudeApiClient(key)
+      } catch {}
+    }
 
     setCacheDir(path.join(app.getPath('userData'), 'patch-cache'))
     initPatchData().then(info => {
