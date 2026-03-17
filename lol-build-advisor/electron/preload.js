@@ -162,4 +162,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProvider: () => ipcRenderer.invoke('provider:get'),
   ollamaModels: (baseUrl) => ipcRenderer.invoke('ollama:models', baseUrl),
   ollamaValidate: (opts) => ipcRenderer.invoke('ollama:validate', opts),
+
+  // Ollama 自動セットアップ
+  ollamaCheckStatus: () => ipcRenderer.invoke('ollama:check-status'),
+  ollamaFullSetup: (model) => ipcRenderer.invoke('ollama:full-setup', model),
+  ollamaPullModel: (model) => ipcRenderer.invoke('ollama:pull-model', model),
+  ollamaStartService: () => ipcRenderer.invoke('ollama:start-service'),
+  onOllamaSetupProgress: (cb) => {
+    const handler = (_, progress) => cb(progress)
+    ipcRenderer.on('ollama:setup-progress', handler)
+    return () => ipcRenderer.removeListener('ollama:setup-progress', handler)
+  },
 })

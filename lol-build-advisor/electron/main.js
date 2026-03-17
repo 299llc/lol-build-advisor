@@ -4,6 +4,7 @@ const fs = require('fs')
 const { LiveClientPoller } = require('./api/liveClient')
 const { ClaudeApiClient } = require('./api/claudeApi')
 const { OllamaProvider } = require('./api/providers/ollamaProvider')
+const { OllamaSetup } = require('./api/ollamaSetup')
 const { LicenseManager } = require('./api/licenseManager')
 const { ContextBuilder, extractEnName } = require('./api/contextBuilder')
 const { DiffDetector } = require('./api/diffDetector')
@@ -360,6 +361,35 @@ function setupIPC() {
   ipcMain.handle('ollama:validate', async (_, opts) => {
     const provider = new OllamaProvider(opts || {})
     return provider.validate()
+  })
+
+  // ── Ollama 自動セットアップ ──
+  ipcMain.handle('ollama:check-status', async () => {
+    const setup = new OllamaSetup(app.getPath('userData'))
+    return setup.checkStatus()
+  })
+
+  ipcMain.handle('ollama:full-setup', async (_, model) => {
+    const setup = new OllamaSetup(app.getPath('userData'), (progress) => {
+      broadcast('ollama:setup-progress', progress)
+    })
+    return setup.fullSetup(model || undefined)
+  })
+
+  ipcMain.handle('ollama:pull-model', async (_, model) => {
+    const setup = new OllamaSetup(app.getPath('userData'), (progress) => {
+      broadcast('ollama:setup-progress', progress)
+    })
+    return setup.pullModel(model || undefined)
+  })
+
+  ipcMain.handle('ollama:start-service', async () => {
+    const setup = new OllamaSetup(app.getPath('userData'))
+    const running = await setup._isRunning()
+    if (running) return { success: true, already: true }
+    await setup._startService()
+    const ready = await setup._waitForReady(15000)
+    return { success: ready }
   })
 
   // ── ライセンス管理 ──
@@ -1432,6 +1462,19 @@ if (!gotTheLock) {
       const provider = new OllamaProvider({ baseUrl: savedProvider.baseUrl, model: savedProvider.model })
       state.claudeClient = new ClaudeApiClient(provider)
       console.log(`[Provider] Restored Ollama (model: ${savedProvider.model || 'auto'})`)
+
+      // Ollama が起動していなければ自動起動
+      const setup = new OllamaSetup(app.getPath('userData'))
+      setup.checkStatus().then(async (s) => {
+        if (s.installed && !s.running) {
+          console.log('[OllamaSetup] Ollama not running, auto-starting...')
+          await setup._startService()
+          const ready = await setup._waitForReady(15000)
+          console.log(`[OllamaSetup] Auto-start ${ready ? 'succeeded' : 'failed'}`)
+        } else if (!s.installed) {
+          console.log('[OllamaSetup] Ollama not installed — user needs to run setup from settings')
+        }
+      }).catch(() => {})
     } else {
       const keyPath = path.join(app.getPath('userData'), '.api-key')
       try {

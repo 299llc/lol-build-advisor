@@ -1,22 +1,197 @@
 import { useState, useEffect } from 'react'
-import { X, Key, Check, Loader2, AlertCircle, Brain, Pin, RefreshCw, FolderOpen, Cpu, Globe, Shield, ChevronDown } from 'lucide-react'
+import { X, Check, Loader2, AlertCircle, Brain, Pin, RefreshCw, FolderOpen, Cpu, Shield, ChevronDown, Download, Play, Zap } from 'lucide-react'
+
+function OllamaSetupWizard({ onComplete }) {
+  const [status, setStatus] = useState(null) // { installed, running, models }
+  const [checking, setChecking] = useState(true)
+  const [setupRunning, setSetupRunning] = useState(false)
+  const [progress, setProgress] = useState(null) // { stage, message, percent? }
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    checkStatus()
+    const unsub = window.electronAPI?.onOllamaSetupProgress?.(setProgress)
+    return () => unsub?.()
+  }, [])
+
+  const checkStatus = async () => {
+    setChecking(true)
+    setError(null)
+    try {
+      const s = await window.electronAPI?.ollamaCheckStatus()
+      setStatus(s)
+    } catch {
+      setStatus({ installed: false, running: false, models: [] })
+    }
+    setChecking(false)
+  }
+
+  const runFullSetup = async () => {
+    setSetupRunning(true)
+    setError(null)
+    const result = await window.electronAPI?.ollamaFullSetup('qwen3:4b')
+    setSetupRunning(false)
+    setProgress(null)
+    if (result?.success) {
+      await checkStatus()
+      onComplete?.()
+    } else {
+      setError(result?.error || 'セットアップに失敗しました')
+    }
+  }
+
+  const startService = async () => {
+    setSetupRunning(true)
+    setError(null)
+    const result = await window.electronAPI?.ollamaStartService()
+    setSetupRunning(false)
+    if (result?.success) {
+      await checkStatus()
+    } else {
+      setError('Ollamaの起動に失敗しました')
+    }
+  }
+
+  const pullModel = async () => {
+    setSetupRunning(true)
+    setError(null)
+    const result = await window.electronAPI?.ollamaPullModel('qwen3:4b')
+    setSetupRunning(false)
+    setProgress(null)
+    if (result?.success) {
+      await checkStatus()
+    } else {
+      setError(result?.error || 'モデルのダウンロードに失敗しました')
+    }
+  }
+
+  if (checking) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-4">
+        <Loader2 size={14} className="animate-spin text-lol-blue" />
+        <span className="text-xs text-lol-text-light">Ollamaの状態を確認中...</span>
+      </div>
+    )
+  }
+
+  const hasModel = status?.models?.some(m => m.includes('qwen3'))
+
+  // セットアップ中の進捗表示
+  if (setupRunning && progress) {
+    return (
+      <div className="space-y-3 py-2">
+        <div className="flex items-center gap-2">
+          <Loader2 size={14} className="animate-spin text-lol-blue" />
+          <span className="text-xs text-lol-text-light">{progress.message}</span>
+        </div>
+        {progress.percent != null && (
+          <div className="w-full bg-lol-surface-light rounded-full h-1.5">
+            <div
+              className="bg-lol-blue h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // 全てOK
+  if (status?.installed && status?.running && hasModel) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <Check size={14} className="text-lol-accent" />
+        <span className="text-xs text-lol-accent">Ollama準備完了 (qwen3モデル利用可能)</span>
+        <button onClick={checkStatus} className="ml-auto text-lol-text hover:text-lol-text-light">
+          <RefreshCw size={10} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* ステータス表示 */}
+      <div className="space-y-1">
+        <StatusItem label="Ollama インストール" ok={status?.installed} />
+        <StatusItem label="Ollama 起動中" ok={status?.running} />
+        <StatusItem label="AIモデル (qwen3)" ok={hasModel} />
+      </div>
+
+      {error && (
+        <p className="text-[11px] text-lol-red flex items-center gap-1">
+          <AlertCircle size={10} />
+          {error}
+        </p>
+      )}
+
+      {/* アクションボタン */}
+      {!status?.installed ? (
+        <button
+          onClick={runFullSetup}
+          disabled={setupRunning}
+          className="w-full py-2 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+        >
+          <Download size={14} />
+          ワンクリックセットアップ
+          <span className="text-[10px] text-lol-text">(Ollama + AIモデル)</span>
+        </button>
+      ) : !status?.running ? (
+        <button
+          onClick={startService}
+          disabled={setupRunning}
+          className="w-full py-2 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+        >
+          <Play size={14} />
+          Ollamaを起動
+        </button>
+      ) : !hasModel ? (
+        <button
+          onClick={pullModel}
+          disabled={setupRunning}
+          className="w-full py-2 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+        >
+          <Download size={14} />
+          AIモデルをダウンロード (qwen3:4b ~2.6GB)
+        </button>
+      ) : null}
+
+      {setupRunning && !progress && (
+        <div className="flex items-center justify-center gap-2 py-2">
+          <Loader2 size={12} className="animate-spin text-lol-blue" />
+          <span className="text-[11px] text-lol-text">処理中...</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatusItem({ label, ok }) {
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <div className={`w-2 h-2 rounded-full ${ok ? 'bg-lol-accent' : 'bg-lol-red'}`} />
+      <span className={`text-[11px] ${ok ? 'text-lol-text-light' : 'text-lol-text'}`}>{label}</span>
+      <span className={`text-[10px] ml-auto ${ok ? 'text-lol-accent' : 'text-lol-red'}`}>
+        {ok ? 'OK' : '未完了'}
+      </span>
+    </div>
+  )
+}
 
 export function SettingsDialog({ onClose }) {
-  const [apiKey, setApiKey] = useState('')
-  const [status, setStatus] = useState('idle')
-  const [saved, setSaved] = useState(false)
   const [aiOn, setAiOn] = useState(false)
   const [onTop, setOnTop] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState(null)
 
-  // プロバイダー設定
-  const [providerType, setProviderType] = useState('anthropic') // 'anthropic' | 'ollama'
+  // プロバイダー設定 (現在はローカルLLMのみ)
+  const [providerType, setProviderType] = useState('ollama')
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
   const [ollamaModel, setOllamaModel] = useState('')
   const [ollamaModels, setOllamaModels] = useState([])
   const [ollamaStatus, setOllamaStatus] = useState('idle') // idle, checking, connected, error
   const [providerSaved, setProviderSaved] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   // ライセンス
   const [licenseKey, setLicenseKey] = useState('')
@@ -25,20 +200,14 @@ export function SettingsDialog({ onClose }) {
   const [licenseError, setLicenseError] = useState('')
 
   useEffect(() => {
-    window.electronAPI?.getApiKey().then(key => {
-      if (key) { setApiKey(key); setStatus('valid') }
-    })
     window.electronAPI?.getAiStatus().then(on => setAiOn(!!on))
     window.electronAPI?.getOnTopStatus().then(on => setOnTop(!!on))
 
     // プロバイダー復元
     window.electronAPI?.getProvider().then(p => {
-      if (p?.type === 'ollama') {
-        setProviderType('ollama')
-        if (p.baseUrl) setOllamaUrl(p.baseUrl)
-        if (p.model) setOllamaModel(p.model)
-        setOllamaStatus('connected')
-      }
+      if (p?.baseUrl) setOllamaUrl(p.baseUrl)
+      if (p?.model) setOllamaModel(p.model)
+      if (p?.type === 'ollama') setOllamaStatus('connected')
     })
 
     // ライセンス状態
@@ -46,20 +215,6 @@ export function SettingsDialog({ onClose }) {
       if (s) setLicenseStatus(s)
     })
   }, [])
-
-  const handleSave = async () => {
-    if (!apiKey.trim()) return
-    setStatus('validating')
-    const valid = await window.electronAPI?.validateApiKey(apiKey.trim())
-    if (valid) {
-      await window.electronAPI?.setApiKey(apiKey.trim())
-      setStatus('valid')
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } else {
-      setStatus('invalid')
-    }
-  }
 
   const handleAiToggle = async () => {
     const next = !aiOn
@@ -96,11 +251,11 @@ export function SettingsDialog({ onClose }) {
     }
   }
 
-  // Anthropic プロバイダーに切替
-  const switchToAnthropic = async () => {
-    setProviderType('anthropic')
-    if (apiKey.trim()) {
-      await window.electronAPI?.setAnthropicProvider(apiKey.trim())
+  // セットアップ完了時に自動接続
+  const handleSetupComplete = async () => {
+    await checkOllama()
+    if (ollamaModels.length > 0 || ollamaStatus === 'connected') {
+      await saveOllamaProvider()
     }
   }
 
@@ -159,131 +314,85 @@ export function SettingsDialog({ onClose }) {
             </button>
           </div>
 
-          {/* ── AIプロバイダー選択 ── */}
-          <div className="space-y-2">
-            <span className="text-xs text-lol-text flex items-center gap-1.5">
-              <Cpu size={12} />
-              AIプロバイダー
-            </span>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setProviderType('ollama') }}
-                className={`flex-1 py-1.5 text-xs rounded border transition-colors ${providerType === 'ollama' ? 'bg-lol-blue/20 border-lol-blue text-lol-blue' : 'border-lol-gold-dim/30 text-lol-text hover:border-lol-gold/50'}`}
-              >
-                <Cpu size={12} className="inline mr-1" />
-                ローカルLLM
-              </button>
-              <button
-                onClick={switchToAnthropic}
-                className={`flex-1 py-1.5 text-xs rounded border transition-colors ${providerType === 'anthropic' ? 'bg-lol-gold/20 border-lol-gold text-lol-gold' : 'border-lol-gold-dim/30 text-lol-text hover:border-lol-gold/50'}`}
-              >
-                <Globe size={12} className="inline mr-1" />
-                Claude API
-              </button>
+          {/* ── ローカルLLM (Ollama) セットアップ ── */}
+          <div className="space-y-2 p-3 rounded bg-lol-bg border border-lol-blue/20">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-lol-text-light flex items-center gap-1.5">
+                <Zap size={12} className="text-lol-blue" />
+                ローカルAI セットアップ
+              </span>
             </div>
-          </div>
 
-          {/* Ollama 設定 */}
-          {providerType === 'ollama' && (
-            <div className="space-y-2 p-3 rounded bg-lol-bg border border-lol-blue/20">
-              <div className="space-y-1">
-                <label className="text-[11px] text-lol-text">Ollama URL</label>
-                <div className="flex gap-2">
-                  <input
-                    value={ollamaUrl}
-                    onChange={e => { setOllamaUrl(e.target.value); setOllamaStatus('idle') }}
-                    className="flex-1 px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light focus:outline-none focus:border-lol-blue/50"
-                  />
-                  <button
-                    onClick={checkOllama}
-                    disabled={ollamaStatus === 'checking'}
-                    className="px-2 py-1 text-xs rounded border border-lol-blue/30 text-lol-blue hover:bg-lol-blue/20 disabled:opacity-40"
-                  >
-                    {ollamaStatus === 'checking' ? <Loader2 size={12} className="animate-spin" /> : '接続'}
-                  </button>
-                </div>
-              </div>
+            <OllamaSetupWizard onComplete={handleSetupComplete} />
 
-              {ollamaStatus === 'connected' && (
+            {/* 詳細設定（折りたたみ） */}
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-[10px] text-lol-text hover:text-lol-text-light flex items-center gap-1"
+            >
+              <ChevronDown size={10} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+              詳細設定
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-2 pt-1 border-t border-lol-blue/10">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-lol-text">モデル</label>
-                  <div className="relative">
-                    <select
-                      value={ollamaModel}
-                      onChange={e => setOllamaModel(e.target.value)}
-                      className="w-full px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light focus:outline-none focus:border-lol-blue/50 appearance-none"
+                  <label className="text-[11px] text-lol-text">Ollama URL</label>
+                  <div className="flex gap-2">
+                    <input
+                      value={ollamaUrl}
+                      onChange={e => { setOllamaUrl(e.target.value); setOllamaStatus('idle') }}
+                      className="flex-1 px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light focus:outline-none focus:border-lol-blue/50"
+                    />
+                    <button
+                      onClick={checkOllama}
+                      disabled={ollamaStatus === 'checking'}
+                      className="px-2 py-1 text-xs rounded border border-lol-blue/30 text-lol-blue hover:bg-lol-blue/20 disabled:opacity-40"
                     >
-                      {ollamaModels.map(m => (
-                        <option key={m.name} value={m.name}>
-                          {m.name} ({(m.size / 1e9).toFixed(1)}GB)
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={12} className="absolute right-2 top-2 text-lol-text pointer-events-none" />
+                      {ollamaStatus === 'checking' ? <Loader2 size={12} className="animate-spin" /> : '接続'}
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {ollamaStatus === 'error' && (
-                <p className="text-[11px] text-lol-red flex items-center gap-1">
-                  <AlertCircle size={10} />
-                  接続できません。ollamaが起動しているか確認してください。
-                </p>
-              )}
+                {ollamaStatus === 'connected' && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-lol-text">モデル</label>
+                    <div className="relative">
+                      <select
+                        value={ollamaModel}
+                        onChange={e => setOllamaModel(e.target.value)}
+                        className="w-full px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light focus:outline-none focus:border-lol-blue/50 appearance-none"
+                      >
+                        {ollamaModels.map(m => (
+                          <option key={m.name} value={m.name}>
+                            {m.name} ({(m.size / 1e9).toFixed(1)}GB)
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-2 top-2 text-lol-text pointer-events-none" />
+                    </div>
+                  </div>
+                )}
 
-              {ollamaStatus === 'connected' && (
-                <button
-                  onClick={saveOllamaProvider}
-                  className="w-full py-1.5 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-1"
-                >
-                  {providerSaved ? <Check size={12} /> : <Cpu size={12} />}
-                  {providerSaved ? '保存しました' : 'ローカルLLMを使用'}
-                </button>
-              )}
+                {ollamaStatus === 'error' && (
+                  <p className="text-[11px] text-lol-red flex items-center gap-1">
+                    <AlertCircle size={10} />
+                    接続できません。
+                  </p>
+                )}
 
-              <p className="text-[10px] text-lol-text leading-relaxed">
-                <a href="https://ollama.com" className="text-lol-blue underline">ollama.com</a> からインストールし、
-                <code className="text-lol-blue/70">ollama pull qwen3:4b</code> でモデルを取得してください。
-              </p>
-            </div>
-          )}
-
-          {/* Claude API 設定 */}
-          {providerType === 'anthropic' && (
-            <div className="space-y-2">
-              <label className="flex items-center gap-1.5 text-xs text-lol-text">
-                <Key size={12} />
-                Anthropic APIキー
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => { setApiKey(e.target.value); setStatus('idle') }}
-                placeholder="sk-ant-..."
-                className="w-full px-3 py-2 bg-lol-bg border border-lol-gold-dim/30 rounded text-sm text-lol-text-light placeholder:text-lol-text/30 focus:outline-none focus:border-lol-gold/50"
-              />
-              {status === 'invalid' && (
-                <div className="flex items-center gap-1.5 text-[11px] text-lol-red">
-                  <AlertCircle size={12} />
-                  APIキーが無効です
-                </div>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={!apiKey.trim() || status === 'validating'}
-                className="w-full py-2 rounded font-medium text-sm bg-lol-gold/20 text-lol-gold border border-lol-gold/30 hover:bg-lol-gold/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                {status === 'validating' && <Loader2 size={14} className="animate-spin" />}
-                {saved && <Check size={14} />}
-                {saved ? '保存しました' : '検証して保存'}
-              </button>
-              <p className="text-[10px] text-lol-text leading-relaxed">
-                APIキーはローカルに保存されます。
-                キーは <a href="https://console.anthropic.com/" className="text-lol-blue underline">console.anthropic.com</a> で取得できます。
-              </p>
-            </div>
-          )}
+                {ollamaStatus === 'connected' && (
+                  <button
+                    onClick={saveOllamaProvider}
+                    className="w-full py-1.5 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-1"
+                  >
+                    {providerSaved ? <Check size={12} /> : <Cpu size={12} />}
+                    {providerSaved ? '保存しました' : '設定を保存'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* ── ライセンス ── */}
           <div className="space-y-2 p-3 rounded bg-lol-bg border border-lol-gold-dim/30">
