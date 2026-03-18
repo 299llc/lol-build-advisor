@@ -17,6 +17,7 @@ const { buildMacroStaticContext, buildMacroDynamicContext, getObjectivesSummary,
 const { MACRO_INTERVAL_MS, MACRO_DEBOUNCE_MS, COUNTER_ITEMS, ITEM_COMPLETE_GOLD, ITEM_BOOT_GOLD, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS, isCompletedItem, classifyObjectiveEvents } = require('./core/config')
 const { SessionRecorder } = require('./core/sessionRecorder')
 const { GameLogger } = require('./core/gameLogger')
+const { AdManager } = require('./api/adManager')
 
 // ── ゲームロガー（console.log フック）──────────────
 const gameLogger = new GameLogger(app.getPath('userData'))
@@ -383,6 +384,19 @@ function setupIPC() {
     return setup.pullModel(model || undefined)
   })
 
+  ipcMain.handle('ollama:delete-model', async (_, model) => {
+    try {
+      const res = await fetch('http://localhost:11434/api/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: model }),
+      })
+      return { success: res.ok }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
   ipcMain.handle('ollama:start-service', async () => {
     const setup = new OllamaSetup(app.getPath('userData'))
     const running = await setup._isRunning()
@@ -405,6 +419,14 @@ function setupIPC() {
   ipcMain.handle('license:clear', () => {
     state.licenseManager?.clearLicense()
     return { tier: 'free' }
+  })
+
+  // ── 広告 ──
+  const adManager = new AdManager()
+  ipcMain.handle('ad:get', async () => {
+    const status = state.licenseManager?.getStatus()
+    if (status?.tier === 'pro') return null
+    return adManager.pickAd()
   })
 
   ipcMain.handle('polling:start', () => startPolling())
@@ -475,6 +497,14 @@ function setupIPC() {
     if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
     shell.openPath(logDir)
     return logDir
+  })
+
+  // 外部リンクをブラウザで開く
+  ipcMain.handle('shell:openExternal', (_, url) => {
+    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+      const { shell } = require('electron')
+      shell.openExternal(url)
+    }
   })
 
   ipcMain.handle('lastgame:get', () => loadLastGame())
@@ -568,8 +598,14 @@ async function requestMacroAdvice(gameData, me, allies, enemies) {
       macroLog('API returned null')
     }
   } catch (err) {
-    macroLog(`Error: ${err.message}`)
-    broadcast('macro:advice', { error: err.message })
+    if (err.authError) {
+      macroLog('Auth error - stopping. Check provider settings.')
+      state.aiEnabled = false
+      broadcast('ai:error', { type: 'auth', message: 'APIキーが無効またはプロバイダー未設定です。' })
+    } else {
+      macroLog(`Error: ${err.message}`)
+      broadcast('macro:advice', { error: err.message })
+    }
   } finally {
     state.macroPending = false
     broadcast('macro:loading', false)
@@ -643,8 +679,17 @@ async function requestCoaching(snapshot) {
     itemDictLines.push(`${summary.name}(${summary.gold}G): ${summary.stats} / ${summary.desc}`)
   }
 
+  const isLocal = state.claudeClient?.isLocalLLM?.()
+
   const lines = [
-    `=== 試合終了データ ===`,
+    // 参照データを先に配置（モデルが最後の内容に注目するため、辞書で終わらせない）
+    `【参照: チャンピオンスキル情報】`,
+    ...champSkillLines,
+    '',
+    `【参照: アイテム辞書】`,
+    ...itemDictLines,
+    '',
+    `=== 以下の試合データを評価してください ===`,
     `試合時間: ${minutes}分`,
     '',
     `【自分】${me.championName} (${me.position || '?'})`,
@@ -663,12 +708,7 @@ async function requestCoaching(snapshot) {
     `【敵チーム】`,
     ...(enemies || []).map(formatPlayer),
     '',
-    `【チャンピオンスキル情報】`,
-    ...champSkillLines,
-    '',
-    `【アイテム辞書（効果・ステータス）】`,
-    `※以下はこの試合に関連するアイテムの正確な効果です。コーチングではこの情報を参照してください。`,
-    ...itemDictLines
+    `上記の試合データを評価してJSONのみ返答してください。`
   ]
 
   console.log('[Coaching] Requesting post-game evaluation...')
@@ -677,6 +717,8 @@ async function requestCoaching(snapshot) {
   try {
     const result = await state.claudeClient.getCoaching(lines.join('\n'))
     if (result) {
+      console.log(`[Coaching] Raw keys: ${Object.keys(result).join(', ')}`)
+      console.log(`[Coaching] Raw JSON: ${JSON.stringify(result).substring(0, 500)}`)
       console.log(`[Coaching] Score: ${result.overall_score}/10 Build: ${result.build_score || '?'}/10`)
       if (result.sections) {
         for (const s of result.sections) {
@@ -1337,8 +1379,14 @@ function handleMatchupTip(me, resolvedPosition, enemies) {
       state.matchupTipLoaded = false
     }
   }).catch(err => {
-    console.error('[MatchupTip] Error:', err.message, '- will retry')
-    state.matchupTipLoaded = false
+    if (err.authError) {
+      console.error('[MatchupTip] Auth error - stopping retries. Check provider settings.')
+      state.aiEnabled = false
+      broadcast('ai:error', { type: 'auth', message: 'APIキーが無効またはプロバイダー未設定です。' })
+    } else {
+      console.error('[MatchupTip] Error:', err.message, '- will retry')
+      state.matchupTipLoaded = false
+    }
   })
 }
 
@@ -1377,7 +1425,13 @@ function handleAiSuggestion(gameData) {
     }).catch(err => {
       state.aiPending = false
       broadcast('ai:loading', false)
-      broadcast('ai:suggestion', { error: err.message })
+      if (err.authError) {
+        console.error('[AiSuggestion] Auth error - stopping. Check provider settings.')
+        state.aiEnabled = false
+        broadcast('ai:error', { type: 'auth', message: 'APIキーが無効またはプロバイダー未設定です。' })
+      } else {
+        broadcast('ai:suggestion', { error: err.message })
+      }
     })
   }
 }
@@ -1475,12 +1529,49 @@ if (!gotTheLock) {
           console.log('[OllamaSetup] Ollama not installed — user needs to run setup from settings')
         }
       }).catch(() => {})
-    } else {
+    } else if (savedProvider?.type === 'anthropic') {
+      // Anthropicプロバイダーが明示的に設定されている場合のみ
       const keyPath = path.join(app.getPath('userData'), '.api-key')
       try {
         const key = fs.readFileSync(keyPath, 'utf-8')
-        if (key) state.claudeClient = new ClaudeApiClient(key)
+        if (key && key.startsWith('sk-ant-')) {
+          state.claudeClient = new ClaudeApiClient(key)
+          console.log('[Provider] Restored Anthropic')
+        } else {
+          console.log('[Provider] No valid Anthropic key found')
+        }
       } catch {}
+    } else {
+      // プロバイダー未設定 → Ollamaが起動していれば自動接続
+      console.log('[Provider] No provider configured. Trying auto-detect Ollama...')
+      const autoProvider = new OllamaProvider({})
+      autoProvider.validate().then(async (ok) => {
+        if (ok) {
+          // モデル一覧から最適なモデルを選択して保存
+          const models = await autoProvider.listModels()
+          const qwen = models.find(m => m.name.includes('qwen'))
+          const modelName = qwen?.name || models[0]?.name || 'qwen3.5:9b'
+          autoProvider.defaultModel = modelName
+          state.claudeClient = new ClaudeApiClient(autoProvider)
+          saveSetting('provider', { type: 'ollama', baseUrl: autoProvider.baseUrl, model: modelName })
+          console.log(`[Provider] Auto-detected Ollama (model: ${modelName})`)
+        } else {
+          // Ollamaも無い → 古いAPIキーを試す
+          const keyPath = path.join(app.getPath('userData'), '.api-key')
+          try {
+            const key = fs.readFileSync(keyPath, 'utf-8')
+            if (key && key.startsWith('sk-ant-')) {
+              state.claudeClient = new ClaudeApiClient(key)
+              console.log('[Provider] Fallback to Anthropic key')
+            }
+          } catch {}
+          if (!state.claudeClient) {
+            console.log('[Provider] No provider available. Use Settings to set up Ollama.')
+          }
+        }
+      }).catch(() => {
+        console.log('[Provider] Ollama auto-detect failed')
+      })
     }
 
     setCacheDir(path.join(app.getPath('userData'), 'patch-cache'))

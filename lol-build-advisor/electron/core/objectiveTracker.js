@@ -30,7 +30,7 @@ function objectiveStatus(name, config, kills, gameTime) {
       return `${name}: 取得可能 (${kills.length}体討伐済み)`
     }
     const rem = Math.ceil(nextSpawn - gameTime)
-    return `${name}: リスポーンまで${formatTime(rem)} (${kills.length}体討伐済み)`
+    return `${name}: リスポーン待ち（あと${formatTime(rem)}）→ 対象外 (${kills.length}体討伐済み)`
   }
 
   // キルイベントなし → ゲーム時間ベースのフォールバック
@@ -38,7 +38,7 @@ function objectiveStatus(name, config, kills, gameTime) {
     return `${name}: 取得可能 (討伐状況不明)`
   }
   const rem = Math.ceil(firstSpawn - gameTime)
-  return `${name}: スポーンまで${formatTime(rem)}`
+  return `${name}: 未出現（スポーンまで${formatTime(rem)}）→ 対象外`
 }
 
 function formatTime(seconds) {

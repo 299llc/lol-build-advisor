@@ -13,7 +13,7 @@ const http = require('http')
 
 const OLLAMA_API = 'http://localhost:11434'
 const OLLAMA_DOWNLOAD_URL = 'https://ollama.com/download/OllamaSetup.exe'
-const DEFAULT_MODEL = 'qwen3:4b'
+const DEFAULT_MODEL = 'qwen3.5:9b'
 
 class OllamaSetup {
   /**

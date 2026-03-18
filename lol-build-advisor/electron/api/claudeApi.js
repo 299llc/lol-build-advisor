@@ -84,21 +84,26 @@ class ClaudeApiClient {
       clearTimeout(timeout)
       logEntry.durationMs = Date.now() - startTime
 
-      const text = result.text
-      logEntry.response = text
+      // ローカルLLM (qwen3等) の <think>...</think> タグを除去
+      const rawText = result.text
+      const text = rawText.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim()
+      logEntry.response = rawText
+      if (rawText !== text && rawText.includes('<think>')) {
+        console.log(`[AI:${logType}] Stripped <think> tag (${rawText.length} -> ${text.length} chars)`)
+      }
 
       if (result.usage) {
         logEntry.tokens = result.usage
-        console.log(`[Claude:${logType}:${this.getProviderType()}] tokens: in=${result.usage.input} out=${result.usage.output} cache_read=${result.usage.cache_read} cache_create=${result.usage.cache_creation}`)
+        console.log(`[AI:${logType}:${this.getProviderType()}] tokens: in=${result.usage.input} out=${result.usage.output} cache_read=${result.usage.cache_read} cache_create=${result.usage.cache_creation}`)
       }
 
       if (result.stopReason === 'max_tokens') {
-        console.warn(`[Claude:${logType}] Output truncated (max_tokens reached)`)
+        console.warn(`[AI:${logType}] Output truncated (max_tokens reached)`)
       }
 
       const jsonMatch = text.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
-        console.error(`[Claude:${logType}] No JSON found in response: ${text.substring(0, 200)}`)
+        console.error(`[AI:${logType}] No JSON found in response: ${text.substring(0, 200)}`)
         this._pushLog(logEntry)
         return null
       }
@@ -108,7 +113,7 @@ class ClaudeApiClient {
         this._pushLog(logEntry)
         return parsed
       } catch (parseErr) {
-        console.error(`[Claude:${logType}] JSON parse failed: ${jsonMatch[0].substring(0, 200)}`)
+        console.error(`[AI:${logType}] JSON parse failed: ${jsonMatch[0].substring(0, 200)}`)
         logEntry.error = `JSON parse: ${parseErr.message}`
         this._pushLog(logEntry)
         return null
@@ -117,8 +122,14 @@ class ClaudeApiClient {
       clearTimeout(timeout)
       logEntry.durationMs = Date.now() - startTime
       logEntry.error = err.message || String(err)
-      console.error(`[Claude:${logType}:${this.getProviderType()}] Error: ${logEntry.error}`)
+      console.error(`[AI:${logType}:${this.getProviderType()}] Error: ${logEntry.error}`)
       this._pushLog(logEntry)
+      // 認証エラーをマーク (リトライ制御用)
+      if (/HTTP (401|403)/.test(logEntry.error)) {
+        const authErr = new Error(logEntry.error)
+        authErr.authError = true
+        throw authErr
+      }
       return null
     }
   }

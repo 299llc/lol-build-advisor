@@ -1,4 +1,5 @@
 import { Swords } from 'lucide-react'
+import { AdBanner } from './AdBanner'
 
 export function WaitingScreen() {
   return (
@@ -23,6 +24,9 @@ export function WaitingScreen() {
           LoL設定 → ビデオ → ウィンドウモード → ボーダーレス
         </p>
       </div>
+
+      {/* 広告バナー */}
+      <AdBanner className="mt-4 w-full max-w-xs" />
     </div>
   )
 }

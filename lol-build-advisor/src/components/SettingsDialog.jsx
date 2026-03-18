@@ -1,5 +1,25 @@
 import { useState, useEffect } from 'react'
-import { X, Check, Loader2, AlertCircle, Brain, Pin, RefreshCw, FolderOpen, Cpu, Shield, ChevronDown, Download, Play, Zap } from 'lucide-react'
+import { X, Check, Loader2, AlertCircle, Pin, RefreshCw, FolderOpen, Shield, ChevronDown, Download, Play, Zap, Trash2 } from 'lucide-react'
+
+// ダウンロード可能なモデル一覧
+const AVAILABLE_MODELS = [
+  { id: 'qwen3.5:0.8b', label: 'Qwen3.5 0.8B', desc: '超軽量', size: '0.6GB', sizeBytes: 0.6e9, vram: '2GB+' },
+  { id: 'qwen3.5:2b', label: 'Qwen3.5 2B', desc: '軽量', size: '1.5GB', sizeBytes: 1.5e9, vram: '3GB+' },
+  { id: 'qwen3.5:4b', label: 'Qwen3.5 4B', desc: '高速', size: '2.7GB', sizeBytes: 2.7e9, vram: '4GB+' },
+  { id: 'qwen3.5:9b', label: 'Qwen3.5 9B', desc: '高品質（推奨）', size: '6.6GB', sizeBytes: 6.6e9, vram: '8GB+' },
+  { id: 'qwen3.5:27b', label: 'Qwen3.5 27B', desc: '最高精度', size: '17GB', sizeBytes: 17e9, vram: '24GB+' },
+]
+
+// インストール済みモデルとAVAILABLE_MODELSのマッチング (名前一致 or 同ファミリ+近似サイズ)
+function findInstalledModel(ollamaModels, am) {
+  return ollamaModels.find(m => {
+    if (m.name === am.id) return true
+    // qwen3.5:latest と qwen3.5:9b のようなケース → ベース名+サイズで判定
+    const base = am.id.split(':')[0]
+    if (m.name.startsWith(base) && Math.abs(m.size - am.sizeBytes) / am.sizeBytes < 0.3) return true
+    return false
+  })
+}
 
 function OllamaSetupWizard({ onComplete }) {
   const [status, setStatus] = useState(null) // { installed, running, models }
@@ -29,7 +49,7 @@ function OllamaSetupWizard({ onComplete }) {
   const runFullSetup = async () => {
     setSetupRunning(true)
     setError(null)
-    const result = await window.electronAPI?.ollamaFullSetup('qwen3:4b')
+    const result = await window.electronAPI?.ollamaFullSetup('qwen3.5:9b')
     setSetupRunning(false)
     setProgress(null)
     if (result?.success) {
@@ -48,14 +68,14 @@ function OllamaSetupWizard({ onComplete }) {
     if (result?.success) {
       await checkStatus()
     } else {
-      setError('Ollamaの起動に失敗しました')
+      setError('AIエンジンの起動に失敗しました')
     }
   }
 
   const pullModel = async () => {
     setSetupRunning(true)
     setError(null)
-    const result = await window.electronAPI?.ollamaPullModel('qwen3:4b')
+    const result = await window.electronAPI?.ollamaPullModel('qwen3.5:9b')
     setSetupRunning(false)
     setProgress(null)
     if (result?.success) {
@@ -69,12 +89,12 @@ function OllamaSetupWizard({ onComplete }) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
         <Loader2 size={14} className="animate-spin text-lol-blue" />
-        <span className="text-xs text-lol-text-light">Ollamaの状態を確認中...</span>
+        <span className="text-xs text-lol-text-light">AIの状態を確認中...</span>
       </div>
     )
   }
 
-  const hasModel = status?.models?.some(m => m.includes('qwen3'))
+  const hasModel = status?.models?.some(m => m.includes('qwen'))
 
   // セットアップ中の進捗表示
   if (setupRunning && progress) {
@@ -101,7 +121,7 @@ function OllamaSetupWizard({ onComplete }) {
     return (
       <div className="flex items-center gap-2 py-2">
         <Check size={14} className="text-lol-accent" />
-        <span className="text-xs text-lol-accent">Ollama準備完了 (qwen3モデル利用可能)</span>
+        <span className="text-xs text-lol-accent">AI準備完了</span>
         <button onClick={checkStatus} className="ml-auto text-lol-text hover:text-lol-text-light">
           <RefreshCw size={10} />
         </button>
@@ -113,9 +133,9 @@ function OllamaSetupWizard({ onComplete }) {
     <div className="space-y-2">
       {/* ステータス表示 */}
       <div className="space-y-1">
-        <StatusItem label="Ollama インストール" ok={status?.installed} />
-        <StatusItem label="Ollama 起動中" ok={status?.running} />
-        <StatusItem label="AIモデル (qwen3)" ok={hasModel} />
+        <StatusItem label="AIエンジン" ok={status?.installed} />
+        <StatusItem label="AIエンジン起動中" ok={status?.running} />
+        <StatusItem label="AIモデル" ok={hasModel} />
       </div>
 
       {error && (
@@ -134,7 +154,7 @@ function OllamaSetupWizard({ onComplete }) {
         >
           <Download size={14} />
           ワンクリックセットアップ
-          <span className="text-[10px] text-lol-text">(Ollama + AIモデル)</span>
+          <span className="text-[10px] text-lol-text">(AIエンジン + モデル)</span>
         </button>
       ) : !status?.running ? (
         <button
@@ -143,7 +163,7 @@ function OllamaSetupWizard({ onComplete }) {
           className="w-full py-2 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
         >
           <Play size={14} />
-          Ollamaを起動
+          AIエンジンを起動
         </button>
       ) : !hasModel ? (
         <button
@@ -152,7 +172,7 @@ function OllamaSetupWizard({ onComplete }) {
           className="w-full py-2 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
         >
           <Download size={14} />
-          AIモデルをダウンロード (qwen3:4b ~2.6GB)
+          AIモデルをダウンロード (~6.6GB)
         </button>
       ) : null}
 
@@ -188,10 +208,12 @@ export function SettingsDialog({ onClose }) {
   const [providerType, setProviderType] = useState('ollama')
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
   const [ollamaModel, setOllamaModel] = useState('')
+  const [activeModel, setActiveModel] = useState('') // 現在使用中のモデル名
   const [ollamaModels, setOllamaModels] = useState([])
-  const [ollamaStatus, setOllamaStatus] = useState('idle') // idle, checking, connected, error
-  const [providerSaved, setProviderSaved] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [ollamaStatus, setOllamaStatus] = useState('connected')
+  const [showModelManager, setShowModelManager] = useState(false)
+  const [pullingModel, setPullingModel] = useState(null) // ダウンロード中のモデルID
+  const [pullProgress, setPullProgress] = useState(null)
 
   // ライセンス
   const [licenseKey, setLicenseKey] = useState('')
@@ -206,14 +228,32 @@ export function SettingsDialog({ onClose }) {
     // プロバイダー復元
     window.electronAPI?.getProvider().then(p => {
       if (p?.baseUrl) setOllamaUrl(p.baseUrl)
-      if (p?.model) setOllamaModel(p.model)
-      if (p?.type === 'ollama') setOllamaStatus('connected')
+      const model = p?.model || (p?.type === 'ollama' ? 'qwen3.5:9b' : '')
+      if (model) { setOllamaModel(model); setActiveModel(model) }
+      if (p?.type === 'ollama') {
+        setOllamaStatus('connected')
+        // モデル一覧も取得
+        const url = p.baseUrl || 'http://localhost:11434'
+        window.electronAPI?.ollamaModels(url).then(models => {
+          if (models?.length > 0) {
+            setOllamaModels(models)
+            // 現在のモデルがリストにない場合はリスト先頭を選択
+            if (model && !models.some(m => m.name === model)) {
+              setOllamaModel(models[0].name)
+            }
+          }
+        }).catch(() => {})
+      }
     })
 
     // ライセンス状態
     window.electronAPI?.getLicenseStatus().then(s => {
       if (s) setLicenseStatus(s)
     })
+
+    // モデルDL進捗
+    const unsubProgress = window.electronAPI?.onOllamaSetupProgress?.(setPullProgress)
+    return () => unsubProgress?.()
   }, [])
 
   const handleAiToggle = async () => {
@@ -222,41 +262,44 @@ export function SettingsDialog({ onClose }) {
     setAiOn(next)
   }
 
-  // Ollama 接続テスト
-  const checkOllama = async () => {
-    setOllamaStatus('checking')
+  // モデル追加ダウンロード
+  const pullNewModel = async (modelId) => {
+    setPullingModel(modelId)
+    setPullProgress(null)
+    const result = await window.electronAPI?.ollamaPullModel(modelId)
+    setPullingModel(null)
+    setPullProgress(null)
+    if (result?.success) {
+      // モデル一覧を再取得
+      const models = await window.electronAPI?.ollamaModels(ollamaUrl)
+      if (models?.length > 0) setOllamaModels(models)
+    }
+  }
+
+  // モデルを削除
+  const deleteModel = async (modelId) => {
+    await window.electronAPI?.ollamaDeleteModel?.(modelId)
+    const models = await window.electronAPI?.ollamaModels(ollamaUrl)
+    if (models) setOllamaModels(models)
+    // 削除したのが使用中なら先頭に切り替え
+    if (activeModel === modelId && models?.length > 0) {
+      setActiveModel(models[0].name)
+      setOllamaModel(models[0].name)
+      await window.electronAPI?.setOllamaProvider({ baseUrl: ollamaUrl, model: models[0].name })
+    }
+  }
+
+  // セットアップ完了時にモデル一覧取得
+  const handleSetupComplete = async () => {
     try {
       const models = await window.electronAPI?.ollamaModels(ollamaUrl)
-      if (models && models.length > 0) {
+      if (models?.length > 0) {
         setOllamaModels(models)
         setOllamaStatus('connected')
         if (!ollamaModel) setOllamaModel(models[0].name)
-      } else {
-        setOllamaStatus('error')
+        await window.electronAPI?.setOllamaProvider({ baseUrl: ollamaUrl, model: models[0].name })
       }
-    } catch {
-      setOllamaStatus('error')
-    }
-  }
-
-  // Ollama プロバイダー保存
-  const saveOllamaProvider = async () => {
-    const result = await window.electronAPI?.setOllamaProvider({
-      baseUrl: ollamaUrl,
-      model: ollamaModel || undefined,
-    })
-    if (result?.success) {
-      setProviderSaved(true)
-      setTimeout(() => setProviderSaved(false), 2000)
-    }
-  }
-
-  // セットアップ完了時に自動接続
-  const handleSetupComplete = async () => {
-    await checkOllama()
-    if (ollamaModels.length > 0 || ollamaStatus === 'connected') {
-      await saveOllamaProvider()
-    }
+    } catch {}
   }
 
   // ライセンス検証
@@ -300,98 +343,120 @@ export function SettingsDialog({ onClose }) {
             </button>
           </div>
 
-          {/* AI ON/OFF トグル */}
-          <div className="flex items-center justify-between py-2 px-3 rounded bg-lol-bg border border-lol-gold-dim/30">
-            <div className="flex items-center gap-2">
-              <Brain size={14} className={aiOn ? 'text-lol-blue' : 'text-lol-text'} />
-              <span className="text-xs text-lol-text-light">AIビルド提案</span>
-            </div>
-            <button
-              onClick={handleAiToggle}
-              className={`relative w-10 h-5 rounded-full transition-colors ${aiOn ? 'bg-lol-blue' : 'bg-lol-surface-light'}`}
-            >
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${aiOn ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-
-          {/* ── ローカルLLM (Ollama) セットアップ ── */}
+          {/* ── AI セットアップ ── */}
           <div className="space-y-2 p-3 rounded bg-lol-bg border border-lol-blue/20">
             <div className="flex items-center justify-between">
               <span className="text-xs text-lol-text-light flex items-center gap-1.5">
                 <Zap size={12} className="text-lol-blue" />
-                ローカルAI セットアップ
+                AI セットアップ
               </span>
             </div>
 
             <OllamaSetupWizard onComplete={handleSetupComplete} />
 
-            {/* 詳細設定（折りたたみ） */}
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-[10px] text-lol-text hover:text-lol-text-light flex items-center gap-1"
-            >
-              <ChevronDown size={10} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-              詳細設定
-            </button>
-
-            {showAdvanced && (
+            {/* モデル選択＋管理 */}
+            {ollamaStatus === 'connected' && (
               <div className="space-y-2 pt-1 border-t border-lol-blue/10">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-lol-text">Ollama URL</label>
-                  <div className="flex gap-2">
-                    <input
-                      value={ollamaUrl}
-                      onChange={e => { setOllamaUrl(e.target.value); setOllamaStatus('idle') }}
-                      className="flex-1 px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light focus:outline-none focus:border-lol-blue/50"
-                    />
-                    <button
-                      onClick={checkOllama}
-                      disabled={ollamaStatus === 'checking'}
-                      className="px-2 py-1 text-xs rounded border border-lol-blue/30 text-lol-blue hover:bg-lol-blue/20 disabled:opacity-40"
-                    >
-                      {ollamaStatus === 'checking' ? <Loader2 size={12} className="animate-spin" /> : '接続'}
-                    </button>
-                  </div>
-                </div>
-
-                {ollamaStatus === 'connected' && (
+                {/* 使用モデル選択 */}
+                {ollamaModels.length > 0 && (
                   <div className="space-y-1">
-                    <label className="text-[11px] text-lol-text">モデル</label>
+                    <label className="text-[10px] text-lol-text">使用モデル</label>
                     <div className="relative">
                       <select
-                        value={ollamaModel}
-                        onChange={e => setOllamaModel(e.target.value)}
-                        className="w-full px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light focus:outline-none focus:border-lol-blue/50 appearance-none"
+                        value={activeModel}
+                        onChange={async (e) => {
+                          const model = e.target.value
+                          setActiveModel(model)
+                          setOllamaModel(model)
+                          await window.electronAPI?.setOllamaProvider({ baseUrl: ollamaUrl, model })
+                        }}
+                        className="w-full px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-[11px] text-lol-text-light focus:outline-none focus:border-lol-blue/50 appearance-none pr-6"
                       >
-                        {ollamaModels.map(m => (
-                          <option key={m.name} value={m.name}>
-                            {m.name} ({(m.size / 1e9).toFixed(1)}GB)
-                          </option>
-                        ))}
+                        {ollamaModels.map(m => {
+                          const known = AVAILABLE_MODELS.find(am => findInstalledModel([m], am))
+                          return (
+                            <option key={m.name} value={m.name}>
+                              {known ? `${known.label} (${known.size})` : `${m.name} (${(m.size / 1e9).toFixed(1)}GB)`}
+                            </option>
+                          )
+                        })}
                       </select>
-                      <ChevronDown size={12} className="absolute right-2 top-2 text-lol-text pointer-events-none" />
+                      <ChevronDown size={10} className="absolute right-2 top-2.5 text-lol-text pointer-events-none" />
                     </div>
                   </div>
                 )}
 
-                {ollamaStatus === 'error' && (
-                  <p className="text-[11px] text-lol-red flex items-center gap-1">
-                    <AlertCircle size={10} />
-                    接続できません。
-                  </p>
-                )}
+                {/* モデルDL一覧 */}
+                <button
+                  onClick={() => setShowModelManager(!showModelManager)}
+                  className="text-[10px] text-lol-text hover:text-lol-text-light flex items-center gap-1"
+                >
+                  <ChevronDown size={10} className={`transition-transform ${showModelManager ? 'rotate-180' : ''}`} />
+                  モデルを追加・管理
+                </button>
 
-                {ollamaStatus === 'connected' && (
-                  <button
-                    onClick={saveOllamaProvider}
-                    className="w-full py-1.5 text-xs rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 transition-colors flex items-center justify-center gap-1"
-                  >
-                    {providerSaved ? <Check size={12} /> : <Cpu size={12} />}
-                    {providerSaved ? '保存しました' : '設定を保存'}
-                  </button>
+                {showModelManager && (
+                  <div className="space-y-1.5">
+                    {AVAILABLE_MODELS.map(am => {
+                      const matchedModel = findInstalledModel(ollamaModels, am)
+                      const installed = !!matchedModel
+                      const isPulling = pullingModel === am.id
+                      const isActive = matchedModel && (activeModel === matchedModel.name)
+                      return (
+                        <div key={am.id} className={`flex items-center gap-2 px-2 py-1.5 rounded text-[11px] ${isActive ? 'bg-lol-blue/10 border border-lol-blue/30' : 'bg-lol-surface border border-lol-gold-dim/20'}`}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-lol-text-light font-medium">{am.label}</span>
+                              <span className="text-[9px] text-lol-text/40">{am.size}</span>
+                              {isActive && <span className="text-[9px] text-lol-blue">使用中</span>}
+                            </div>
+                            <span className="text-[9px] text-lol-text/50">{am.desc} / メモリ {am.vram}</span>
+                          </div>
+                          {isPulling ? (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Loader2 size={10} className="animate-spin text-lol-blue" />
+                              <span className="text-[9px] text-lol-blue">
+                                {pullProgress?.percent != null ? `${pullProgress.percent}%` : 'DL中...'}
+                              </span>
+                            </div>
+                          ) : installed ? (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Check size={10} className="text-lol-accent" />
+                              {!isActive && ollamaModels.length > 1 && (
+                                <button
+                                  onClick={() => deleteModel(matchedModel.name)}
+                                  className="text-lol-text/30 hover:text-lol-red transition-colors"
+                                  title="削除"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => pullNewModel(am.id)}
+                              disabled={!!pullingModel}
+                              className="px-2 py-0.5 text-[10px] rounded bg-lol-blue/20 text-lol-blue border border-lol-blue/30 hover:bg-lol-blue/30 disabled:opacity-40 transition-colors shrink-0"
+                            >
+                              DL
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {pullingModel && pullProgress?.percent != null && (
+                      <div className="w-full bg-lol-surface-light rounded-full h-1">
+                        <div
+                          className="bg-lol-blue h-1 rounded-full transition-all duration-300"
+                          style={{ width: `${pullProgress.percent}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
+
           </div>
 
           {/* ── ライセンス ── */}

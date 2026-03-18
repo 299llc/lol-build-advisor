@@ -6,9 +6,9 @@ module.exports = {
   // AI呼び出しデバウンス
   AI_DEBOUNCE_MS: 10000,
 
-  // マクロアドバイス
-  MACRO_INTERVAL_MS: 120000,
-  MACRO_DEBOUNCE_MS: 30000,
+  // マクロアドバイス (ローカルLLMはコスト無制限なので短間隔)
+  MACRO_INTERVAL_MS: 45000,
+  MACRO_DEBOUNCE_MS: 15000,
 
   // オブジェクトスポーンタイム (秒) — Season 2024/2025
   OBJECTIVES: {

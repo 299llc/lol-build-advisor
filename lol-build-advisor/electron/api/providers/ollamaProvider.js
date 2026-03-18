@@ -7,8 +7,8 @@ const OLLAMA_BASE = 'http://localhost:11434'
 
 // Claude モデル名 → Ollama モデル名のマッピング
 const MODEL_MAP = {
-  'claude-haiku-4-5-20251001': 'qwen3:4b',
-  'claude-sonnet-4-6': 'qwen3:4b',
+  'claude-haiku-4-5-20251001': 'qwen3.5:9b',
+  'claude-sonnet-4-6': 'qwen3.5:9b',
   // ユーザーがカスタムモデルを指定した場合はそのまま使う
 }
 
@@ -50,6 +50,7 @@ class OllamaProvider {
         // [{type:'text', text:'...', cache_control:...}] → テキスト結合
         content = msg.content.map(c => c.text || '').join('\n')
       }
+      // (no_think は Ollama API の think パラメータで制御)
       ollamaMessages.push({ role: msg.role, content })
     }
 
@@ -57,6 +58,8 @@ class OllamaProvider {
       model: ollamaModel,
       messages: ollamaMessages,
       stream: false,
+      think: false,
+      format: 'json',
       options: {
         temperature,
         num_predict: maxTokens || 2048,
@@ -83,9 +86,26 @@ class OllamaProvider {
 
     const data = await res.json()
     const elapsed = Date.now() - startTime
+    let content = data.message?.content || ''
+    if (!content && data.message) {
+      console.log(`[Ollama] Empty content. Keys: ${Object.keys(data.message).join(',')} think=${!!data.message.thinking_content}`)
+    }
+    if (content.length < 10) {
+      console.log(`[Ollama] Short response (${content.length} chars): ${content}`)
+    }
+
+    // format:'json' 時のpretty-printed JSONをcompact化 (トークン節約 & 確実なパース)
+    if (content) {
+      try {
+        const parsed = JSON.parse(content)
+        content = JSON.stringify(parsed)
+      } catch {
+        // JSONパース失敗 → そのまま返す (claudeApi側でfallback)
+      }
+    }
 
     return {
-      text: data.message?.content || '',
+      text: content,
       usage: {
         input: data.prompt_eval_count || 0,
         output: data.eval_count || 0,
