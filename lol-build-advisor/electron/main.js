@@ -76,6 +76,7 @@ const state = {
   _lastObjLogKey: null,       // Objectivesログ重複防止（ゲーム中維持）
   _lastObjTriggerKey: null,   // オブジェクトスポーン前トリガー重複防止（ゲーム中維持）
   _lastStatsMinute: 0,        // プレイヤースタッツログ重複防止
+  _nonClassicLogged: false,   // ARAM等の非CLASSICモードログ重複防止
 
   // チャンプセレクト
   champSelectChampId: null,
@@ -591,6 +592,7 @@ async function requestMacroAdvice(gameData, me, allies, enemies) {
     const dynamicCtx = buildMacroDynamicContext(gameData, me, allies, enemies)
     const advice = await state.claudeClient.getMacroAdvice(staticCtx, dynamicCtx)
     if (advice) {
+      macroLog(`Raw: ${JSON.stringify(advice).substring(0, 300)}`)
       advice.gameTime = gameData.gameData?.gameTime || 0
       broadcast('macro:advice', advice)
       macroLog(`Sent: ${advice.title}`)
@@ -1052,6 +1054,18 @@ function triggerGameEnd() {
 }
 
 async function handleGameData(gameData) {
+  // サモナーズリフト以外（ARAM等）はAI分析をスキップ
+  // 待機画面のままで前回のコーチング結果が表示される
+  const gameMode = gameData.gameData?.gameMode
+  if (gameMode && gameMode !== 'CLASSIC') {
+    if (!state._nonClassicLogged) {
+      console.log(`[Game] ゲームモード "${gameMode}" — サポート対象外、待機画面を維持`)
+      state._nonClassicLogged = true
+    }
+    return
+  }
+  if (state._nonClassicLogged) state._nonClassicLogged = false
+
   if (state.champSelectChampId) state.champSelectChampId = null
 
   // ゲーム終了済みの場合
@@ -1262,10 +1276,10 @@ async function handleGameData(gameData) {
 
   if (state.lastGameStatus !== 'ingame') {
     broadcast('game:status', 'ingame')
-    // 試合開始検知 → ウィンドウを最前面に表示
+    // 試合開始検知 → ウィンドウを1回だけ前面に出す（常時最前面にはしない）
     if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-      state.mainWindow.setAlwaysOnTop(true, 'screen-saver')
       state.mainWindow.show()
+      state.mainWindow.moveTop()
       state.mainWindow.focus()
     }
   }

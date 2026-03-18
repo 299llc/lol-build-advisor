@@ -7,7 +7,12 @@
  * プロバイダー抽象化: AnthropicProvider (BYOK) / BedrockProvider (AWS) / OllamaProvider (ローカルLLM) を切り替え可能
  */
 const { ITEM_PROMPT, MATCHUP_PROMPT, MACRO_PROMPT, COACHING_PROMPT } = require('../core/prompts')
-const { LOCAL_ITEM_PROMPT, LOCAL_MATCHUP_PROMPT, LOCAL_MACRO_PROMPT, LOCAL_COACHING_STEP1_PROMPT, LOCAL_COACHING_STEP2_PROMPT } = require('../core/localPrompts')
+const {
+  LOCAL_ITEM_STEP1_PROMPT, LOCAL_ITEM_STEP2_PROMPT,
+  LOCAL_MATCHUP_STEP1_PROMPT, LOCAL_MATCHUP_STEP2_PROMPT,
+  LOCAL_MACRO_STEP1_PROMPT, LOCAL_MACRO_STEP2_PROMPT,
+  LOCAL_COACHING_STEP1_PROMPT, LOCAL_COACHING_STEP2_PROMPT,
+} = require('../core/localPrompts')
 const { buildKnowledgeContext } = require('../core/knowledgeDb')
 const { AnthropicProvider } = require('./providers/anthropicProvider')
 
@@ -78,18 +83,19 @@ class ClaudeApiClient {
     try {
       const result = await this.provider.sendMessage({
         model, maxTokens, temperature, system, messages,
-        signal: controller.signal
+        signal: controller.signal,
+        jsonMode: !rawText  // Step1(自由文)ではJSON制約を外す
       })
 
       clearTimeout(timeout)
       logEntry.durationMs = Date.now() - startTime
 
       // ローカルLLM (qwen3等) の <think>...</think> タグを除去
-      const rawText = result.text
-      const text = rawText.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim()
-      logEntry.response = rawText
-      if (rawText !== text && rawText.includes('<think>')) {
-        console.log(`[AI:${logType}] Stripped <think> tag (${rawText.length} -> ${text.length} chars)`)
+      const responseText = result.text
+      const text = responseText.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim()
+      logEntry.response = responseText
+      if (responseText !== text && responseText.includes('<think>')) {
+        console.log(`[AI:${logType}] Stripped <think> tag (${responseText.length} -> ${text.length} chars)`)
       }
 
       if (result.usage) {
@@ -115,7 +121,12 @@ class ClaudeApiClient {
       }
 
       try {
-        const parsed = JSON.parse(jsonMatch[0])
+        let parsed = JSON.parse(jsonMatch[0])
+        // Ollama が JSON を文字列として二重エンコードするケース対策（最大3段階）
+        for (let i = 0; i < 3 && typeof parsed === 'string'; i++) {
+          try { parsed = JSON.parse(parsed) } catch { break }
+        }
+        console.log(`[AI:${logType}] Parsed type: ${typeof parsed}, keys: ${typeof parsed === 'object' && parsed ? Object.keys(parsed).join(',') : 'N/A'}`)
         this._pushLog(logEntry)
         return parsed
       } catch (parseErr) {
@@ -138,6 +149,25 @@ class ClaudeApiClient {
       }
       return null
     }
+  }
+
+  /**
+   * ローカルLLM 2段階呼び出しヘルパー
+   * Step1: 自由文で分析（format制約なし）→ Step2: JSON化（format:'json'）
+   */
+  async _twoStepLocal({ step1System, step2System, messages, step1MaxTokens = 500, step2MaxTokens = 300, logPrefix, timeoutMs = 60000 }) {
+    const analysis = await this._callApi({
+      model: MODEL_HAIKU, maxTokens: step1MaxTokens, temperature: 0.7,
+      system: step1System, messages,
+      timeoutMs, logType: `${logPrefix}-step1`, rawText: true
+    })
+    if (!analysis) return null
+    return this._callApi({
+      model: MODEL_HAIKU, maxTokens: step2MaxTokens, temperature: 0.3,
+      system: step2System,
+      messages: [{ role: 'user', content: analysis }],
+      timeoutMs: 30000, logType: `${logPrefix}-step2`
+    })
   }
 
   _buildUserMessage(dynamicContext) {
@@ -194,17 +224,19 @@ class ClaudeApiClient {
       messages.push({ role: 'user', content: parts.join('\n\n') })
     }
 
-    const systemPrompt = isLocal ? LOCAL_ITEM_PROMPT : ITEM_PROMPT
-
-    const aiResult = await this._callApi({
-      model: MODEL_HAIKU,
-      maxTokens: isLocal ? 400 : 600,
-      temperature: isLocal ? 0.7 : 0,
-      system: isLocal ? systemPrompt : [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-      messages,
-      timeoutMs: isLocal ? 60000 : 30000,
-      logType: 'suggestion'
-    })
+    let aiResult
+    if (isLocal) {
+      aiResult = await this._twoStepLocal({
+        step1System: LOCAL_ITEM_STEP1_PROMPT, step2System: LOCAL_ITEM_STEP2_PROMPT,
+        messages, step1MaxTokens: 500, step2MaxTokens: 300, logPrefix: 'suggestion'
+      })
+    } else {
+      aiResult = await this._callApi({
+        model: MODEL_HAIKU, maxTokens: 600, temperature: 0,
+        system: [{ type: 'text', text: ITEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages, timeoutMs: 30000, logType: 'suggestion'
+      })
+    }
 
     if (!aiResult) return this.lastSuggestion
 
@@ -236,15 +268,19 @@ class ClaudeApiClient {
     if (isLocal) {
       const knowledge = buildKnowledgeContext(this.position || 'MID', 0)
       userContent = knowledge ? `${knowledge}\n\n${matchupContext}` : matchupContext
+
+      return this._twoStepLocal({
+        step1System: LOCAL_MATCHUP_STEP1_PROMPT, step2System: LOCAL_MATCHUP_STEP2_PROMPT,
+        messages: [{ role: 'user', content: userContent }],
+        step1MaxTokens: 600, step2MaxTokens: 400, logPrefix: 'matchup'
+      })
     }
+
     return this._callApi({
-      model: MODEL_HAIKU,
-      maxTokens: isLocal ? 500 : 700,
-      temperature: isLocal ? 0.7 : 0,
-      system: isLocal ? LOCAL_MATCHUP_PROMPT : MATCHUP_PROMPT,
+      model: MODEL_HAIKU, maxTokens: 700, temperature: 0,
+      system: [{ type: 'text', text: MATCHUP_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userContent }],
-      timeoutMs: isLocal ? 60000 : 20000,
-      logType: 'matchup'
+      timeoutMs: 20000, logType: 'matchup'
     })
   }
 
@@ -259,7 +295,6 @@ class ClaudeApiClient {
         { role: 'user', content: dynamicContext }
       )
     } else {
-      // ローカルLLM: 1メッセージにまとめる
       const parts = []
       if (staticContext) parts.push(staticContext)
       if (isLocal) {
@@ -270,16 +305,18 @@ class ClaudeApiClient {
       messages.push({ role: 'user', content: parts.join('\n\n') })
     }
 
-    const systemPrompt = isLocal ? LOCAL_MACRO_PROMPT : MACRO_PROMPT
+    if (isLocal) {
+      return this._twoStepLocal({
+        step1System: LOCAL_MACRO_STEP1_PROMPT, step2System: LOCAL_MACRO_STEP2_PROMPT,
+        messages, step1MaxTokens: 400, step2MaxTokens: 300, logPrefix: 'macro'
+      })
+    }
 
     return this._callApi({
-      model: MODEL_HAIKU,
-      maxTokens: isLocal ? 300 : 500,
-      temperature: isLocal ? 0.7 : 0,
-      system: isLocal ? systemPrompt : [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      model: MODEL_HAIKU, maxTokens: 500, temperature: 0,
+      system: [{ type: 'text', text: MACRO_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages,
-      timeoutMs: isLocal ? 60000 : 20000,
-      logType: 'macro'
+      timeoutMs: 20000, logType: 'macro'
     })
   }
 
@@ -287,31 +324,10 @@ class ClaudeApiClient {
     const isLocal = this.isLocalLLM()
 
     if (isLocal) {
-      // 2段階コーチング: Step1 自由文で分析 → Step2 JSON化
-      console.log('[Coaching] Step1: 自由文分析...')
-      const analysis = await this._callApi({
-        model: MODEL_HAIKU,
-        maxTokens: 1500,
-        temperature: 0.7,
-        system: LOCAL_COACHING_STEP1_PROMPT,
+      return this._twoStepLocal({
+        step1System: LOCAL_COACHING_STEP1_PROMPT, step2System: LOCAL_COACHING_STEP2_PROMPT,
         messages: [{ role: 'user', content: gameContext }],
-        timeoutMs: 120000,
-        logType: 'coaching-step1',
-        rawText: true
-      })
-
-      if (!analysis) return null
-      console.log(`[Coaching] Step1 result (${analysis.length} chars): ${analysis.substring(0, 200)}`)
-
-      console.log('[Coaching] Step2: JSON化...')
-      return this._callApi({
-        model: MODEL_HAIKU,
-        maxTokens: 800,
-        temperature: 0,
-        system: LOCAL_COACHING_STEP2_PROMPT,
-        messages: [{ role: 'user', content: analysis }],
-        timeoutMs: 60000,
-        logType: 'coaching-step2'
+        step1MaxTokens: 1500, step2MaxTokens: 800, logPrefix: 'coaching', timeoutMs: 120000
       })
     }
 

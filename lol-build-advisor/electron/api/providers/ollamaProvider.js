@@ -29,7 +29,7 @@ class OllamaProvider {
     return MODEL_MAP[model] || model
   }
 
-  async sendMessage({ model, maxTokens, temperature = 0.7, system, messages, signal }) {
+  async sendMessage({ model, maxTokens, temperature = 0.7, system, messages, signal, jsonMode = true }) {
     const ollamaModel = this._resolveModel(model)
 
     // system プロンプトを文字列に統一
@@ -59,12 +59,13 @@ class OllamaProvider {
       messages: ollamaMessages,
       stream: false,
       think: false,
-      format: 'json',
       options: {
         temperature,
         num_predict: maxTokens || 2048,
       },
     }
+    // Step2(JSON化)のみformat制約を付与、Step1(自由文)では外す
+    if (jsonMode) body.format = 'json'
 
     if (systemText) {
       body.messages = [{ role: 'system', content: systemText }, ...body.messages]
@@ -94,10 +95,18 @@ class OllamaProvider {
       console.log(`[Ollama] Short response (${content.length} chars): ${content}`)
     }
 
-    // format:'json' 時のpretty-printed JSONをcompact化 (トークン節約 & 確実なパース)
+    // markdownコードブロック除去 (モデルが ```json ... ``` で返すケース)
     if (content) {
+      content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+    }
+
+    // JSONモード時のみ: pretty-printed JSONをcompact化 + 二重エンコード対策
+    if (jsonMode && content) {
       try {
-        const parsed = JSON.parse(content)
+        let parsed = JSON.parse(content)
+        if (typeof parsed === 'string') {
+          try { parsed = JSON.parse(parsed) } catch { /* 文字列のまま */ }
+        }
         content = JSON.stringify(parsed)
       } catch {
         // JSONパース失敗 → そのまま返す (claudeApi側でfallback)
