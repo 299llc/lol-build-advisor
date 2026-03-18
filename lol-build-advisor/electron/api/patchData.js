@@ -208,7 +208,12 @@ async function loadSpellsForMatch(champNames) {
         key: ['Q', 'W', 'E', 'R'][j],
         name: s.name,
         desc: stripTags(s.description)
-      }))
+      })),
+      // Riot公式のチャンプTips（強み/弱み）
+      allyTips: (info.allytips || []).map(t => stripTags(t)),
+      enemyTips: (info.enemytips || []).map(t => stripTags(t)),
+      // 攻撃/防御/魔力/難易度（1-10）
+      info: info.info || {},
     }
   })
   // 取得した分をディスクに保存

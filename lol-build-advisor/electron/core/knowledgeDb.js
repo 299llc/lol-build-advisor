@@ -499,8 +499,26 @@ function buildMatchChampionKnowledge(allies, enemies, spellData = {}) {
     if (stats.hp && stats.hp > 600) parts.push(`  基礎HP: ${Math.round(stats.hp)}（高い）`)
     if (stats.armor && stats.armor > 35) parts.push(`  基礎AR: ${Math.round(stats.armor)}（硬い）`)
 
-    // スキル要約（60文字に要約）
+    // Riot公式の攻撃/防御/魔力指標
     const spells = spellData[p.enName]
+    if (spells?.info) {
+      const info = spells.info
+      const ratings = []
+      if (info.attack >= 7) ratings.push('攻撃型')
+      if (info.defense >= 7) ratings.push('防御型')
+      if (info.magic >= 7) ratings.push('魔法型')
+      if (ratings.length) parts.push(`  特性: ${ratings.join('・')}`)
+    }
+
+    // Riot公式Tips（チャンプの強み/弱み）
+    if (spells?.allyTips?.length) {
+      parts.push(`  強み: ${spells.allyTips.slice(0, 2).map(t => t.substring(0, 80)).join(' / ')}`)
+    }
+    if (spells?.enemyTips?.length) {
+      parts.push(`  弱点: ${spells.enemyTips.slice(0, 2).map(t => t.substring(0, 80)).join(' / ')}`)
+    }
+
+    // スキル要約（60文字に要約）
     if (spells) {
       parts.push(`  パッシブ: ${spells.passive.name} - ${spells.passive.desc.substring(0, 60)}`)
       for (const s of spells.spells) {
