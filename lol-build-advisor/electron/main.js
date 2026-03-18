@@ -400,6 +400,28 @@ function setupIPC() {
     }
   })
 
+  // ランク設定（手動）
+  ipcMain.handle('player:set-rank', async (_, rank) => {
+    if (state.claudeClient) state.claudeClient.setRank(rank)
+    // 永続化
+    const fs = require('fs')
+    const path = require('path')
+    const rankFile = path.join(app.getPath('userData'), '.player-rank')
+    fs.writeFileSync(rankFile, rank, 'utf-8')
+    console.log(`[Rank] Manual rank set: ${rank}`)
+    return { success: true }
+  })
+  ipcMain.handle('player:get-rank', async () => {
+    const fs = require('fs')
+    const path = require('path')
+    const rankFile = path.join(app.getPath('userData'), '.player-rank')
+    try {
+      return fs.readFileSync(rankFile, 'utf-8').trim()
+    } catch {
+      return null
+    }
+  })
+
   ipcMain.handle('ollama:start-service', async () => {
     const setup = new OllamaSetup(app.getPath('userData'))
     const running = await setup._isRunning()
@@ -1129,6 +1151,17 @@ async function handleGameData(gameData) {
       state.claudeClient.setChampionKnowledge(knowledge)
       state.championKnowledgeGenerated = true
       console.log(`[MatchKnowledge] Generated champion textbook (${knowledge.length} chars, ${allyTeam.length + enemyTeam.length} champs)`)
+
+      // ランク取得（LCU経由）
+      if (state.lcuClient && !state.claudeClient.rank) {
+        try {
+          const tier = await state.lcuClient.getSoloRankTier()
+          if (tier) {
+            state.claudeClient.setRank(tier)
+            console.log(`[Rank] Player rank: ${tier}`)
+          }
+        } catch { /* LCU接続失敗 → ランクなしで続行 */ }
+      }
     } catch (err) {
       console.error(`[MatchKnowledge] Error: ${err.message}`)
     }
@@ -1648,6 +1681,16 @@ if (!gotTheLock) {
         console.log('[Provider] Ollama auto-detect failed')
       })
     }
+
+    // 保存済みランクを復元
+    try {
+      const rankFile = path.join(app.getPath('userData'), '.player-rank')
+      const savedRank = fs.readFileSync(rankFile, 'utf-8').trim()
+      if (savedRank && state.claudeClient) {
+        state.claudeClient.setRank(savedRank)
+        console.log(`[Rank] Restored: ${savedRank}`)
+      }
+    } catch { /* ランク未設定 → デフォルトなし */ }
 
     setCacheDir(path.join(app.getPath('userData'), 'patch-cache'))
     initPatchData().then(info => {

@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+// Electron環境フラグ（ブラウザテスト時との判別用）
+contextBridge.exposeInMainWorld('__ELECTRON__', true)
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // ウィンドウ操作
   minimize: () => ipcRenderer.send('window:minimize'),
@@ -172,6 +175,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ollamaFullSetup: (model) => ipcRenderer.invoke('ollama:full-setup', model),
   ollamaPullModel: (model) => ipcRenderer.invoke('ollama:pull-model', model),
   ollamaDeleteModel: (model) => ipcRenderer.invoke('ollama:delete-model', model),
+  // ランク設定
+  setPlayerRank: (rank) => ipcRenderer.invoke('player:set-rank', rank),
+  getPlayerRank: () => ipcRenderer.invoke('player:get-rank'),
   ollamaStartService: () => ipcRenderer.invoke('ollama:start-service'),
   onOllamaSetupProgress: (cb) => {
     const handler = (_, progress) => cb(progress)

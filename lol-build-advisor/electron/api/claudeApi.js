@@ -40,6 +40,7 @@ class ClaudeApiClient {
     // ローカルLLM用: ポジション情報
     this.position = null
     this.gameTimeSec = 0
+    this.rank = null  // プレイヤーのランクティア（ランク別アドバイス用）
     // 試合開始時に生成する10体のチャンプ教科書（試合中キャッシュ）
     this.championKnowledge = null
   }
@@ -50,6 +51,7 @@ class ClaudeApiClient {
   setChampionKnowledge(knowledge) { this.championKnowledge = knowledge }
   setPosition(position) { this.position = position }
   setGameTime(sec) { this.gameTimeSec = sec }
+  setRank(rank) { this.rank = rank }
   getSubstituteItems() { return this.substituteItems }
   getLogs() { return this.logs }
   clearLogs() { this.logs = [] }
@@ -65,6 +67,7 @@ class ClaudeApiClient {
     this.totalCalls = 0
     this.position = null
     this.gameTimeSec = 0
+    // rank は試合間で維持（clearMatchでリセットしない）
     this.championKnowledge = null
     this._step1Cache = {}  // Step1キャッシュクリア
   }
@@ -327,7 +330,7 @@ class ClaudeApiClient {
         // キル差を動的コンテキストから抽出して教科書知識を選択
         const killDiffMatch = dynamicContext.match(/\(([+-]?\d+)\)/)
         const killDiff = killDiffMatch ? parseInt(killDiffMatch[1]) : 0
-        const macroKnowledge = buildMacroKnowledge(this.position || 'MID', this.gameTimeSec, killDiff)
+        const macroKnowledge = buildMacroKnowledge(this.position || 'MID', this.gameTimeSec, killDiff, this.rank)
         if (macroKnowledge) parts.push(macroKnowledge)
       }
       parts.push(dynamicContext)

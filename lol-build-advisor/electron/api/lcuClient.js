@@ -100,6 +100,28 @@ class LcuClient {
   async getCurrentSummoner() {
     return this.get('/lol-summoner/v1/current-summoner')
   }
+
+  // ランク情報取得
+  async getRankedStats() {
+    return this.get('/lol-ranked/v1/current-ranked-stats')
+  }
+
+  /**
+   * ソロランクのティアを取得（例: "GOLD", "PLATINUM", "DIAMOND"）
+   * @returns {string|null} ティア文字列 or null
+   */
+  async getSoloRankTier() {
+    try {
+      const stats = await this.getRankedStats()
+      const soloQ = stats?.queueMap?.RANKED_SOLO_5x5
+      if (soloQ && soloQ.tier && soloQ.tier !== 'NA') {
+        return soloQ.tier  // "IRON", "BRONZE", "SILVER", "GOLD", etc.
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
 }
 
 module.exports = { LcuClient }
