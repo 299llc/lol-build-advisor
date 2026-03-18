@@ -60,7 +60,7 @@ class ClaudeApiClient {
   }
 
   // 共通API呼び出し (プロバイダー経由)
-  async _callApi({ model, maxTokens, temperature = 0, system, messages, timeoutMs, logType, rawText: returnRawText = false }) {
+  async _callApi({ model, maxTokens, temperature = 0, system, messages, timeoutMs, logType, rawText = false }) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
     const startTime = Date.now()
@@ -102,7 +102,7 @@ class ClaudeApiClient {
       }
 
       // rawTextモード: JSON解析せずテキストをそのまま返す（2段階コーチング用）
-      if (returnRawText) {
+      if (rawText) {
         this._pushLog(logEntry)
         return text
       }

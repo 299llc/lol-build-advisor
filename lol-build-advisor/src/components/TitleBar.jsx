@@ -6,7 +6,7 @@ export function TitleBar({ status, onSettings, onDebug, onCompactView, compactOp
       <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${status === 'ingame' ? 'bg-lol-blue' : status === 'ended' ? 'bg-lol-red' : 'bg-lol-gold animate-pulse'}`} />
         <span className="font-heading text-sm text-lol-gold tracking-wider">
-          LOL BUILD ADVISOR
+          ろるさぽくん
         </span>
       </div>
 

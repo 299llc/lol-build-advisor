@@ -1,12 +1,16 @@
 import { GraduationCap, Loader2, TrendingUp, TrendingDown, ChevronRight } from 'lucide-react'
 
+// 定数スタイル（レンダーごとのオブジェクト再生成防止）
+const STROKE_TRANSITION = { transition: 'stroke-dasharray 0.6s ease' }
+const BAR_TRANSITION = { transition: 'width 0.6s ease' }
+
 // グレード → 棒グラフ幅% & SVG色
 const GRADE_BAR = {
-  S: { pct: 100, color: '#C8AA6E', bg: 'bg-lol-gold/15' },    // gold
-  A: { pct: 80,  color: '#4ade80', bg: 'bg-green-400/10' },    // green
-  B: { pct: 60,  color: '#0AC8B9', bg: 'bg-lol-blue/10' },     // blue
-  C: { pct: 40,  color: '#facc15', bg: 'bg-yellow-400/10' },    // yellow
-  D: { pct: 20,  color: '#E84057', bg: 'bg-lol-red/10' },       // red
+  S: { pct: 100, color: '#C8AA6E' },
+  A: { pct: 80,  color: '#4ade80' },
+  B: { pct: 60,  color: '#0AC8B9' },
+  C: { pct: 40,  color: '#facc15' },
+  D: { pct: 20,  color: '#E84057' },
 }
 
 const GRADE_COLORS = {
@@ -50,7 +54,7 @@ function DonutScore({ score, label }) {
           fill="none" stroke={info.color} strokeWidth={stroke}
           strokeDasharray={dasharray}
           strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+          style={STROKE_TRANSITION}
         />
       </svg>
       {/* 中央テキスト（SVGの上にオーバーレイ） */}
@@ -81,11 +85,7 @@ function GradeBar({ section }) {
       <div className="mx-2 mb-1 h-1.5 rounded-full bg-lol-surface-light/20 overflow-hidden">
         <div
           className="h-full rounded-full"
-          style={{
-            width: `${bar.pct}%`,
-            backgroundColor: bar.color,
-            transition: 'width 0.6s ease',
-          }}
+          style={{ width: `${bar.pct}%`, backgroundColor: bar.color, ...BAR_TRANSITION }}
         />
       </div>
       <p className="text-xs text-lol-text px-2 pb-1.5 leading-relaxed">{section.content}</p>

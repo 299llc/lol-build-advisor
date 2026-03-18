@@ -3,11 +3,11 @@ import { X, Check, Loader2, AlertCircle, Pin, RefreshCw, FolderOpen, Shield, Che
 
 // ダウンロード可能なモデル一覧
 const AVAILABLE_MODELS = [
-  { id: 'qwen3.5:0.8b', label: 'Qwen3.5 0.8B', desc: '超軽量', size: '0.6GB', sizeBytes: 0.6e9, vram: '2GB+' },
-  { id: 'qwen3.5:2b', label: 'Qwen3.5 2B', desc: '軽量', size: '1.5GB', sizeBytes: 1.5e9, vram: '3GB+' },
-  { id: 'qwen3.5:4b', label: 'Qwen3.5 4B', desc: '高速', size: '2.7GB', sizeBytes: 2.7e9, vram: '4GB+' },
-  { id: 'qwen3.5:9b', label: 'Qwen3.5 9B', desc: '高品質（推奨）', size: '6.6GB', sizeBytes: 6.6e9, vram: '8GB+' },
-  { id: 'qwen3.5:27b', label: 'Qwen3.5 27B', desc: '最高精度', size: '17GB', sizeBytes: 17e9, vram: '24GB+' },
+  { id: 'qwen3.5:0.8b', label: 'Qwen3.5 0.8B', desc: '超軽量', sizeBytes: 0.6e9, vram: '2GB+' },
+  { id: 'qwen3.5:2b', label: 'Qwen3.5 2B', desc: '軽量', sizeBytes: 1.5e9, vram: '3GB+' },
+  { id: 'qwen3.5:4b', label: 'Qwen3.5 4B', desc: '高速', sizeBytes: 2.7e9, vram: '4GB+' },
+  { id: 'qwen3.5:9b', label: 'Qwen3.5 9B', desc: '高品質（推奨）', sizeBytes: 6.6e9, vram: '8GB+' },
+  { id: 'qwen3.5:27b', label: 'Qwen3.5 27B', desc: '最高精度', sizeBytes: 17e9, vram: '24GB+' },
 ]
 
 // インストール済みモデルとAVAILABLE_MODELSのマッチング (名前一致 or 同ファミリ+近似サイズ)
@@ -407,10 +407,9 @@ export function SettingsDialog({ onClose }) {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="text-lol-text-light font-medium">{am.label}</span>
-                              <span className="text-[9px] text-lol-text/40">{am.size}</span>
                               {isActive && <span className="text-[9px] text-lol-blue">使用中</span>}
                             </div>
-                            <span className="text-[9px] text-lol-text/50">{am.desc} / メモリ {am.vram}</span>
+                            <span className="text-[9px] text-lol-text/50">{am.desc} / 利用想定メモリ {am.vram}</span>
                           </div>
                           {isPulling ? (
                             <div className="flex items-center gap-1 shrink-0">

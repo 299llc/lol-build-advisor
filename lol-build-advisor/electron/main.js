@@ -1260,7 +1260,15 @@ async function handleGameData(gameData) {
     return
   }
 
-  if (state.lastGameStatus !== 'ingame') broadcast('game:status', 'ingame')
+  if (state.lastGameStatus !== 'ingame') {
+    broadcast('game:status', 'ingame')
+    // 試合開始検知 → ウィンドウを最前面に表示
+    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+      state.mainWindow.setAlwaysOnTop(true, 'screen-saver')
+      state.mainWindow.show()
+      state.mainWindow.focus()
+    }
+  }
   broadcast('game:data', snapshot)
 }
 
@@ -1385,8 +1393,7 @@ function handleMatchupTip(me, resolvedPosition, enemies) {
   }
 
   const tipContext = [
-    ...skillLines,
-    '',
+    ...(skillLines.length > 0 ? [...skillLines, ''] : []),
     `自分: ${me.championName} (${resolvedPosition})`,
     `対面: ${laneOpponent.championName} (${laneOpponent.enName})`
   ].join('\n')
