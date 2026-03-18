@@ -62,6 +62,7 @@ class OllamaProvider {
       options: {
         temperature,
         num_predict: maxTokens || 2048,
+        num_ctx: 16384,  // 教科書+ゲームデータが切り捨てられないよう拡張（デフォルト2048では不足）
       },
     }
     // Step2(JSON化)のみformat制約を付与、Step1(自由文)では外す
