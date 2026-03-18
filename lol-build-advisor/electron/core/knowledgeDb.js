@@ -429,6 +429,7 @@ function buildMacroKnowledge(position, gameTimeSec, killDiff) {
     addSection('レーンでのトレード', MACRO_TEXTBOOK.laneTrading)
     addSection('リコールタイミング', MACRO_TEXTBOOK.recallTiming)
     addSection('序盤のビジョン', MACRO_TEXTBOOK.earlyVision)
+    addSection('ヘラルド/ヴォイドグラブ', MACRO_TEXTBOOK.heraldVoidgrub)
     // JG向け
     if (position === 'JG') {
       addSection('ジャングルトラッキング', MACRO_TEXTBOOK.jungleTracking)
@@ -452,10 +453,20 @@ function buildMacroKnowledge(position, gameTimeSec, killDiff) {
     if (position === 'TOP') {
       addSection('スプリットプッシュ', MACRO_TEXTBOOK.splitPush)
     }
+    // MID/SUP向けのローム（中盤でも有効）
+    if (position === 'MID' || position === 'SUP') {
+      addSection('ローム', MACRO_TEXTBOOK.roaming)
+    }
   }
 
-  // ── パワースパイク（常に有用） ──
+  // ── 常に有用な知識 ──
   addSection('パワースパイク', MACRO_TEXTBOOK.powerSpikes)
+  addSection('ゴールド/経験値', MACRO_TEXTBOOK.goldXpAdvantage)
+
+  // ── 優勢時にタワーダイブの知識を追加 ──
+  if (killDiff >= 2) {
+    addSection('タワーダイブ', MACRO_TEXTBOOK.towerDiving)
+  }
 
   return lines.join('\n')
 }
