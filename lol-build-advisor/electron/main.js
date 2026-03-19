@@ -661,8 +661,11 @@ async function requestCoaching(snapshot) {
   const formatPlayer = (p) => {
     const items = (p.items || []).filter(i => i.itemID > 0).map(i => i.displayName).join(', ')
     const kda = p.scores ? `${p.scores.kills}/${p.scores.deaths}/${p.scores.assists}` : '?'
+    const cs = p.scores?.creepScore || 0
+    const csPerMin = minutes > 0 ? (cs / minutes).toFixed(1) : '0'
+    const ward = p.scores?.wardScore != null ? ` ワード:${Math.round(p.scores.wardScore)}` : ''
     const flags = p.flags?.length ? ` [${p.flags.join(',')}]` : ''
-    return `${p.championName} (${p.position || '?'}) KDA:${kda} Lv${p.level} ${items}${flags}`
+    return `${p.championName} (${p.position || '?'}) KDA:${kda} CS:${cs}(${csPerMin}/min)${ward} Lv${p.level} ${items}${flags}`
   }
 
   // --- チャンプスキル情報を構築 ---
@@ -719,11 +722,13 @@ async function requestCoaching(snapshot) {
     ] : []),
     `=== 以下の試合データを評価してください ===`,
     `試合時間: ${minutes}分`,
+    ...(state.claudeClient?.rank ? [`プレイヤーランク: ${state.claudeClient.rank}`] : []),
     '',
     `【自分】${me.championName} (${me.position || '?'})`,
     `KDA: ${myKDA}`,
     `CS: ${myCS} (${minutes > 0 ? (myCS / minutes).toFixed(1) : 0}/min)`,
     `レベル: ${me.level}`,
+    `ワードスコア: ${me.scores?.wardScore != null ? Math.round(me.scores.wardScore) : '不明'}`,
     `アイテム: ${myItems || 'なし'}`,
     '',
     ...(state.currentCoreBuild ? [`【推奨コアビルド(OP.GG統計)】${state.currentCoreBuild.names.join(', ')}`, ''] : []),
@@ -736,6 +741,37 @@ async function requestCoaching(snapshot) {
     `【敵チーム】`,
     ...(enemies || []).map(formatPlayer),
     '',
+    // イベントタイムライン（キル/オブジェクト）を追加
+    ...(() => {
+      const events = gd?.events?.Events || snapshot.events?.Events || []
+      const timeline = []
+      for (const ev of events) {
+        const t = Math.floor(ev.EventTime || 0)
+        const min = Math.floor(t / 60)
+        const sec = String(t % 60).padStart(2, '0')
+        const time = `${min}:${sec}`
+        if (ev.EventName === 'ChampionKill') {
+          const assists = ev.Assisters?.length ? ` (アシスト: ${ev.Assisters.join(', ')})` : ''
+          timeline.push(`${time} キル: ${ev.KillerName} → ${ev.VictimName}${assists}`)
+        } else if (ev.EventName === 'DragonKill') {
+          const stolen = ev.Stolen ? ' [スティール]' : ''
+          timeline.push(`${time} ドラゴン討伐: ${ev.KillerName}${stolen}`)
+        } else if (ev.EventName === 'BaronKill') {
+          const stolen = ev.Stolen ? ' [スティール]' : ''
+          timeline.push(`${time} バロン討伐: ${ev.KillerName}${stolen}`)
+        } else if (ev.EventName === 'HeraldKill') {
+          timeline.push(`${time} ヘラルド討伐: ${ev.KillerName}`)
+        } else if (ev.EventName === 'TurretKilled') {
+          timeline.push(`${time} タワー破壊: ${ev.TurretKilled}`)
+        } else if (ev.EventName === 'InhibKilled') {
+          timeline.push(`${time} インヒビター破壊: ${ev.InhibKilled}`)
+        }
+      }
+      if (timeline.length === 0) return []
+      // 最大30イベント（直近を優先）
+      const recent = timeline.length > 30 ? timeline.slice(-30) : timeline
+      return ['【試合タイムライン】', ...recent, '']
+    })(),
     `上記の試合データを評価してJSONのみ返答してください。`
   ]
 
