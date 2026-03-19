@@ -60,7 +60,10 @@ class OllamaProvider {
       stream: false,
       think: false,
       options: {
-        temperature,
+        temperature: temperature || 0.7,  // Qwen3.5公式推奨 (thinking OFF時)
+        top_p: 0.8,                       // Qwen3.5公式推奨
+        top_k: 20,                        // Qwen3.5公式推奨
+        presence_penalty: 1.5,            // 同じフレーズの繰り返しを防ぐ
         num_predict: maxTokens || 2048,
         num_ctx: 16384,  // 教科書+ゲームデータが切り捨てられないよう拡張（デフォルト2048では不足）
       },
