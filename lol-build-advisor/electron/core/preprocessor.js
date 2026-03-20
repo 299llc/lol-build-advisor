@@ -3,7 +3,7 @@ const { extractEnName } = require('../api/contextBuilder')
 const { getItemById, getAllChampions, getSpells } = require('../api/patchData')
 const { extractTraits, detectFlags } = require('./championAnalysis')
 const { objectiveStatus, getAvailableObjectiveNames, getObjectiveTimers } = require('./objectiveTracker')
-const { OBJECTIVES, classifyObjectiveEvents, COUNTER_ITEMS } = require('./config')
+const { OBJECTIVES, classifyObjectiveEvents, COUNTER_ITEMS, isCompletedItem } = require('./config')
 const { getGamePhase } = require('./knowledgeDb')
 
 // ロール対面マッピング（同じレーンで対面する相手を特定）
@@ -77,12 +77,28 @@ function estimateGold(player) {
 
 /**
  * プレイヤーのステータス判定（fed/behind/normal）
+ * フェーズ補正あり: 序盤は閾値を下げ、終盤は上げる
  */
-function judgeStatus(scores) {
+function judgeStatus(scores, gamePhase) {
   const kills = scores?.kills || 0
   const deaths = scores?.deaths || 0
-  if (kills >= 5 && kills > deaths * 2) return 'fed'
-  if (deaths >= 5 && deaths > kills * 2) return 'behind'
+
+  // フェーズ別閾値
+  let fedKills, fedMaxDeaths, behindDeaths, behindMaxKills
+  switch (gamePhase) {
+    case 'early':
+      fedKills = 3; fedMaxDeaths = 1; behindDeaths = 3; behindMaxKills = 0
+      break
+    case 'mid':
+      fedKills = 4; fedMaxDeaths = 2; behindDeaths = 4; behindMaxKills = 1
+      break
+    default: // late
+      fedKills = 5; fedMaxDeaths = 2; behindDeaths = 5; behindMaxKills = 1
+      break
+  }
+
+  if (kills >= fedKills && deaths <= fedMaxDeaths) return 'fed'
+  if (deaths >= behindDeaths && kills <= behindMaxKills) return 'behind'
   return 'normal'
 }
 
@@ -144,15 +160,22 @@ class Preprocessor {
    * 生のgameDataとイベントからGameStateオブジェクトを構築する
    * @param {object} gameData - { activePlayer, allPlayers, gameData: { gameTime } }
    * @param {Array} events - gameData.events?.Events || []
+   * @param {object} [options] - オプション
+   * @param {string} [options.spectatorSelectedName] - 観戦モードで選択中のプレイヤー名
    * @returns {object} GameState
    */
-  buildGameState(gameData, events) {
+  buildGameState(gameData, events, options = {}) {
     const { activePlayer, allPlayers, gameData: gd } = gameData
     const gameTime = gd?.gameTime || 0
     events = events || []
 
-    // プレイヤー分離
-    const me = findMe(activePlayer, allPlayers)
+    // プレイヤー分離（観戦モードでは選択キャラを優先）
+    let me
+    if (options.spectatorSelectedName) {
+      me = allPlayers.find(p => p.summonerName === options.spectatorSelectedName) || findMe(activePlayer, allPlayers)
+    } else {
+      me = findMe(activePlayer, allPlayers)
+    }
     const myTeam = me.team
     const allies = allPlayers.filter(p => p.team === myTeam && p !== me)
     const enemies = allPlayers.filter(p => p.team !== myTeam)
@@ -189,10 +212,10 @@ class Preprocessor {
     const ccLevel = judgeCcLevel(enemies)
 
     // 敵のfed/behindプレイヤー
-    const fedPlayers = []
-    const behindPlayers = []
+    const enemyFedPlayers = []
+    const enemyBehindPlayers = []
     for (const e of enemies) {
-      const status = judgeStatus(e.scores)
+      const status = judgeStatus(e.scores, gamePhase)
       const enName = extractEnName(e)
       const playerInfo = {
         champion: e.championName,
@@ -201,46 +224,113 @@ class Preprocessor {
         level: e.level,
         kda: [e.scores?.kills || 0, e.scores?.deaths || 0, e.scores?.assists || 0]
       }
-      if (status === 'fed') fedPlayers.push(playerInfo)
-      if (status === 'behind') behindPlayers.push(playerInfo)
+      if (status === 'fed') enemyFedPlayers.push(playerInfo)
+      if (status === 'behind') enemyBehindPlayers.push(playerInfo)
     }
 
-    // threats: fedかつダメージタイプが明確な敵
-    const threats = fedPlayers.map(fp => {
+    // 味方のfedプレイヤー
+    const allyFedPlayers = []
+    for (const a of [me, ...allies]) {
+      const status = judgeStatus(a.scores, gamePhase)
+      if (status === 'fed') {
+        allyFedPlayers.push(extractEnName(a))
+      }
+    }
+
+    // threats: fedかつダメージタイプ・理由付き（設計書準拠）
+    const threats = enemyFedPlayers.map(fp => {
       const champMap = getAllChampions() || {}
       const champ = Object.values(champMap).find(c => c.enName === fp.enName)
       const tags = champ?.tags || []
-      let damageType = 'mixed'
-      if (tags.includes('Marksman') || tags.includes('Assassin')) damageType = 'AD'
-      if (tags.includes('Mage')) damageType = 'AP'
-      return { ...fp, damageType }
+      let reason = 'fed'
+      if (tags.includes('Marksman') || tags.includes('Assassin')) reason = 'fed_ad_carry'
+      if (tags.includes('Mage')) reason = 'fed_ap_carry'
+      const completedItems = (enemies.find(e => extractEnName(e) === fp.enName)?.items || [])
+        .filter(i => i.itemID > 0 && isCompletedItem(getItemById(i.itemID))).length
+      return { champion: fp.champion, reason, level: fp.level, items: completedItems }
     })
 
     // 構成タイプ推定
     const allyComposition = estimateComposition([me, ...allies])
     const enemyComposition = estimateComposition(enemies)
 
-    // オブジェクト情報
+    // 味方チーム: hasEngager, hasFrontline, damageBalance
+    const allyAllPlayers = [me, ...allies]
+    let hasEngager = false
+    let hasFrontline = false
+    for (const p of allyAllPlayers) {
+      const champMap = getAllChampions() || {}
+      const champ = Object.values(champMap).find(c => c.enName === extractEnName(p))
+      const tags = champ?.tags || []
+      if (tags.includes('Tank')) { hasFrontline = true; hasEngager = true }
+      if (tags.includes('Fighter')) hasFrontline = true
+    }
+    const allyDamageProfile = calcTeamDamage(allyAllPlayers)
+    let damageBalance = 'mixed'
+    if (allyDamageProfile.ad >= 70) damageBalance = 'ad_heavy'
+    else if (allyDamageProfile.ap >= 70) damageBalance = 'ap_heavy'
+
+    // 味方/敵のゴールド合計
+    const allyEstimatedGold = allyAllPlayers.reduce((s, p) => s + estimateGold(p), 0)
+      + (activePlayer?.currentGold || 0)
+    const enemyEstimatedGold = enemies.reduce((s, p) => s + estimateGold(p), 0)
+
+    // オブジェクト情報（設計書準拠: allyCount/enemyCount/nextSpawnSec/soulPoint）
     const classified = classifyObjectiveEvents(events)
+    const timers = getObjectiveTimers(events, gameTime)
+    const available = getAvailableObjectiveNames(events, gameTime)
+
+    // ドラゴン取得チーム別カウント（KillerNameからチーム判定）
+    let dragonAllyCount = 0, dragonEnemyCount = 0
+    for (const ev of classified.dragon) {
+      const killerName = ev.KillerName || ''
+      const isAlly = allyAllPlayers.some(p =>
+        p.summonerName === killerName || p.riotIdGameName === killerName || p.championName === killerName
+      )
+      if (isAlly) dragonAllyCount++
+      else dragonEnemyCount++
+    }
+
     const objectives = {
       dragon: {
-        status: objectiveStatus('ドラゴン', OBJECTIVES.dragon, classified.dragon, gameTime),
-        kills: classified.dragon.length
+        allyCount: dragonAllyCount,
+        enemyCount: dragonEnemyCount,
+        nextSpawnSec: timers.dragon > 0 ? timers.dragon : null,
+        soulPoint: dragonAllyCount >= 3 || dragonEnemyCount >= 3,
+        available: available.includes('ドラゴン')
       },
       baron: {
-        status: objectiveStatus('バロン', OBJECTIVES.baron, classified.baron, gameTime),
-        kills: classified.baron.length
+        available: available.includes('バロン'),
+        spawnSec: timers.baron > 0 ? timers.baron : null
       },
       herald: {
-        status: objectiveStatus('ヘラルド', OBJECTIVES.herald, classified.herald, gameTime),
-        kills: classified.herald.length
+        available: available.includes('ヘラルド')
       },
       voidgrub: {
-        status: objectiveStatus('ヴォイドグラブ', OBJECTIVES.voidgrub, classified.voidgrub, gameTime),
-        kills: classified.voidgrub.length
+        available: available.includes('ヴォイドグラブ')
       },
-      timers: getObjectiveTimers(events, gameTime),
-      available: getAvailableObjectiveNames(events, gameTime)
+      // 後方互換: 既存コードが使う形式も残す
+      timers,
+      _available: available
+    }
+
+    // レーン状態推定（直近イベントから）
+    const laneState = { top: 'unknown', mid: 'unknown', bot: 'unknown' }
+    const recentEvents = events.filter(e =>
+      e.EventName === 'TurretKilled' && (gameTime - (e.EventTime || 0)) < 120
+    )
+    for (const ev of recentEvents) {
+      const turretName = (ev.TurretKilled || '').toLowerCase()
+      let lane = null
+      if (turretName.includes('top') || turretName.includes('_01_')) lane = 'top'
+      else if (turretName.includes('mid') || turretName.includes('_02_')) lane = 'mid'
+      else if (turretName.includes('bot') || turretName.includes('_03_')) lane = 'bot'
+      if (!lane) continue
+      const killerName = ev.KillerName || ''
+      const isAlly = allyAllPlayers.some(p =>
+        p.summonerName === killerName || p.riotIdGameName === killerName || p.championName === killerName
+      )
+      laneState[lane] = isAlly ? 'ally_pushing' : 'enemy_pushing'
     }
 
     // 味方プレイヤー情報構築
@@ -255,7 +345,7 @@ class Preprocessor {
       })),
       kda: [p.scores?.kills || 0, p.scores?.deaths || 0, p.scores?.assists || 0],
       cs: p.scores?.creepScore || 0,
-      status: judgeStatus(p.scores),
+      status: judgeStatus(p.scores, gamePhase),
       estimatedGold: estimateGold(p)
     })
 
@@ -264,8 +354,6 @@ class Preprocessor {
       gamePhase,
       situation,
       killDiff,
-      allyKills,
-      enemyKills,
       me: {
         champion: me.championName,
         enName: meEnName,
@@ -275,25 +363,33 @@ class Preprocessor {
         kda: [me.scores?.kills || 0, me.scores?.deaths || 0, me.scores?.assists || 0],
         cs: me.scores?.creepScore || 0,
         gold: activePlayer?.currentGold || 0,
-        status: judgeStatus(me.scores),
+        status: judgeStatus(me.scores, gamePhase),
         estimatedGold: estimateGold(me)
       },
       allies: allies.map(buildPlayerInfo),
       enemies: enemies.map(buildPlayerInfo),
       enemy: {
+        kills: enemyKills,
+        estimatedGold: enemyEstimatedGold,
         damageProfile,
         healerCount,
         ccLevel,
-        fedPlayers,
-        behindPlayers,
+        fedPlayers: enemyFedPlayers,
+        behindPlayers: enemyBehindPlayers,
         threats,
         composition: enemyComposition
       },
       ally: {
-        composition: allyComposition
+        kills: allyKills,
+        estimatedGold: allyEstimatedGold,
+        composition: allyComposition,
+        hasEngager,
+        hasFrontline,
+        damageBalance,
+        fedPlayers: allyFedPlayers
       },
       objectives,
-      laneState: { top: 'unknown', mid: 'unknown', bot: 'unknown' }
+      laneState
     }
   }
 
@@ -380,10 +476,10 @@ class Preprocessor {
     // 最大5個に制限
     const finalCandidates = candidates.slice(0, 5)
 
-    // enemy_healing判定
+    // enemy_healing判定（設計書: 2=needed, 3=required）
     let enemyHealing = 'none'
-    if (gameState.enemy.healerCount >= 2) enemyHealing = 'required'
-    else if (gameState.enemy.healerCount >= 1) enemyHealing = 'needed'
+    if (gameState.enemy.healerCount >= 3) enemyHealing = 'required'
+    else if (gameState.enemy.healerCount >= 2) enemyHealing = 'needed'
 
     return {
       me: {
@@ -396,6 +492,7 @@ class Preprocessor {
       },
       enemy_damage_profile: gameState.enemy.damageProfile,
       enemy_healing: enemyHealing,
+      enemy_threats: gameState.enemy.threats,
       situation: gameState.situation,
       candidates: finalCandidates,
       core_build: coreBuild.map(item => ({
@@ -417,7 +514,7 @@ class Preprocessor {
     const actionCandidates = []
 
     const timers = gameState.objectives.timers
-    const available = gameState.objectives.available
+    const available = gameState.objectives._available
 
     // 1. オブジェクト取得可能
     if (available.includes('ドラゴン')) {
@@ -481,7 +578,9 @@ class Preprocessor {
       kill_diff: gameState.killDiff,
       objectives: {
         dragon: gameState.objectives.dragon,
-        baron: gameState.objectives.baron
+        baron: gameState.objectives.baron,
+        herald: gameState.objectives.herald,
+        voidgrub: gameState.objectives.voidgrub
       },
       lane_state: gameState.laneState,
       ally_composition: gameState.ally.composition,
@@ -515,89 +614,63 @@ class Preprocessor {
 
     if (!opponent) {
       return {
-        me: { champion: gameState.me.champion, role: gameState.me.position },
+        me: { champion: gameState.me.champion, role: gameState.me.position, skills: null },
         opponent: null,
         matchup_difficulty: 'unknown'
       }
     }
 
-    // スペルデータから危険スキル等を構造化
+    // 両チャンプのスキルデータを取得
+    const mySpells = getSpells(gameState.me.enName)
     const opponentEnName = opponent.enName
     const opSpells = spellData || getSpells(opponentEnName)
-    const CC_REGEX = /スタン|スネア|ノックアップ|ノックバック|サイレンス|フィアー|拘束|束縛|打ち上げ|引き寄せ|チャーム|魅了|挑発|スリープ|変身させ|サプレッション|エアボーン/
-    const BURST_REGEX = /ダメージ.*大|バースト|即死|一撃/
 
-    const dangerSkills = []
-    const counterTags = []
-
-    if (opSpells) {
-      for (const spell of opSpells.spells) {
-        // CCやバーストを持つスキルを危険スキルとして収集
-        if (CC_REGEX.test(spell.desc) || BURST_REGEX.test(spell.desc)) {
-          dangerSkills.push({
-            key: spell.key,
-            name: spell.name,
-            desc: (spell.desc || '').substring(0, 60)
-          })
-        }
+    // スキルを整形するヘルパー
+    const formatSkills = (spells) => {
+      if (!spells) return null
+      return {
+        passive: { name: spells.passive.name, desc: spells.passive.desc },
+        spells: spells.spells.map(s => ({ key: s.key, name: s.name, desc: s.desc }))
       }
-      // カウンタータグ推定
+    }
+
+    // 対面スキルからカウンタータグを抽出
+    const CC_REGEX = /スタン|スネア|ノックアップ|ノックバック|サイレンス|フィアー|拘束|束縛|打ち上げ|引き寄せ|チャーム|魅了|挑発|スリープ|変身させ|サプレッション|エアボーン/
+    const counterTags = []
+    if (opSpells) {
       const allText = [opSpells.passive.desc, ...opSpells.spells.map(s => s.desc)].join(' ')
       if (CC_REGEX.test(allText)) counterTags.push('CC')
-      if (BURST_REGEX.test(allText)) counterTags.push('burst')
+      if (/ダメージ.*大|バースト|即死|一撃/.test(allText)) counterTags.push('burst')
       if (/回復|ヒール|ライフスティール/.test(allText)) counterTags.push('sustain')
       if (/シールド/.test(allText)) counterTags.push('shield')
     }
 
-    // パワースパイク推定
-    const powerSpikes = []
+    // パワースパイク推定（タグベース）
     const champMap = getAllChampions() || {}
     const champ = Object.values(champMap).find(c => c.enName === opponentEnName)
     const tags = champ?.tags || []
-    if (tags.includes('Assassin')) {
-      powerSpikes.push('Lv2(EQ)', 'Lv6(R)', '1アイテム')
-    } else if (tags.includes('Mage')) {
-      powerSpikes.push('Lv3(QWE)', 'Lv6(R)', '2アイテム')
-    } else if (tags.includes('Fighter')) {
-      powerSpikes.push('Lv2', 'Lv6(R)', '1-2アイテム')
-    } else if (tags.includes('Tank')) {
-      powerSpikes.push('Lv3', 'Lv6(R)', '2アイテム')
-    } else if (tags.includes('Marksman')) {
-      powerSpikes.push('Lv2', '1アイテム', '3アイテム')
-    } else {
-      powerSpikes.push('Lv2', 'Lv6(R)', '2アイテム')
-    }
-
-    // トレードパターン推定
-    let tradePattern = ''
-    if (tags.includes('Assassin')) tradePattern = 'バーストコンボで一気にキル狙い'
-    else if (tags.includes('Mage')) tradePattern = 'スキルでポークしつつCDを待ってトレード'
-    else if (tags.includes('Fighter')) tradePattern = 'AA交えたショートトレードor長期戦'
-    else if (tags.includes('Tank')) tradePattern = 'CCからのダメージ交換、長期戦有利'
-    else if (tags.includes('Marksman')) tradePattern = 'AAメインでポジション管理重視'
-    else tradePattern = 'スキルとAA組み合わせのトレード'
-
-    // 弱点推定
-    let weakness = ''
-    if (tags.includes('Assassin')) weakness = 'CCに弱い、集団戦で不利、序盤しのげばスケール差'
-    else if (tags.includes('Mage')) weakness = 'CDが長い、機動力低め、近距離に弱い'
-    else if (tags.includes('Fighter')) weakness = 'カイトに弱い、レンジ差で不利'
-    else if (tags.includes('Tank')) weakness = '火力が低い、ダメージを無視して他を狙える'
-    else if (tags.includes('Marksman')) weakness = '防御が薄い、CCで簡単に倒せる'
-    else weakness = '弱点はチャンピオン固有'
+    const powerSpikes = []
+    if (tags.includes('Assassin')) powerSpikes.push('Lv2(EQ)', 'Lv6(R)', '1アイテム')
+    else if (tags.includes('Mage')) powerSpikes.push('Lv3(QWE)', 'Lv6(R)', '2アイテム')
+    else if (tags.includes('Fighter')) powerSpikes.push('Lv2', 'Lv6(R)', '1-2アイテム')
+    else if (tags.includes('Tank')) powerSpikes.push('Lv3', 'Lv6(R)', '2アイテム')
+    else if (tags.includes('Marksman')) powerSpikes.push('Lv2', '1アイテム', '3アイテム')
+    else powerSpikes.push('Lv2', 'Lv6(R)', '2アイテム')
 
     return {
-      me: { champion: gameState.me.champion, role: gameState.me.position },
+      me: {
+        champion: gameState.me.champion,
+        role: gameState.me.position,
+        skills: formatSkills(mySpells)
+      },
       opponent: {
         champion: opponent.champion,
         role: opponent.position,
-        danger_skills: dangerSkills,
+        skills: formatSkills(opSpells),
         power_spikes: powerSpikes,
-        trade_pattern: tradePattern,
         counter_tags: counterTags,
-        weakness
       },
-      matchup_difficulty: 'medium' // 統計データがないためデフォルト
+      matchup_difficulty: 'medium'
     }
   }
 
@@ -697,7 +770,19 @@ class Preprocessor {
       core_match_rate: coreMatchRate,
       objective_participation: objectiveParticipation,
       kill_diff_final: gameState.killDiff,
-      snapshot_count: gameLog.length
+      snapshot_count: gameLog.length,
+      // 設計書9.2.3: コーチングに必要なフィールド (○)
+      enemy_damage_profile: gameState.enemy.damageProfile,
+      enemy_threats: gameState.enemy.threats,
+      enemy_healer_count: gameState.enemy.healerCount,
+      ally_composition: gameState.ally.composition,
+      enemy_composition: gameState.enemy.composition,
+      // 対面チャンプ（同ロールの敵）
+      lane_opponent: (() => {
+        const myPos = gameState.me.position
+        const opp = gameState.enemies.find(e => normalizePosition(e.position) === myPos)
+        return opp ? { champion: opp.champion, kda: opp.kda, level: opp.level } : null
+      })()
     }
   }
 

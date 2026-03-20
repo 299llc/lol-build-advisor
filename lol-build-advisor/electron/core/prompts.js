@@ -85,20 +85,17 @@ candidatesにないアイテムIDは絶対に含めないこと。
 
 const MATCHUP_PROMPT = `あなたはLoLチャレンジャー帯のコーチです。
 入力は構造化JSONです。各フィールドの意味:
-- me: 自分のチャンピオン・ロール
+- me: 自分のチャンピオン・ロール・スキル一覧（passive+QWER、各スキルにname/desc付き）
 - opponent: 対面チャンピオン情報
-  - danger_skills: CCやバーストを持つ危険スキル一覧（key, name, desc付き）
+  - skills: 対面のスキル一覧（passive+QWER、各スキルにname/desc付き）
   - power_spikes: パワースパイクタイミング一覧
-  - trade_pattern: トレードパターンの傾向
   - counter_tags: カウンター属性タグ（CC/burst/sustain/shield）
-  - weakness: 弱点の概要
-- matchup_difficulty: 対面難易度
 
-opponent.danger_skills, power_spikes, counter_tags等の前処理済みデータを参照してアドバイスしてください。
+【重要】スキル名やスキル内容は必ず入力データのskillsフィールドに記載された情報をそのまま使用してください。
 
 【アドバイスの観点】
-- 序盤のレーニングで意識すべきポイント
-- 自分のチャンプの強みを活かすプレイスタイル（アグレッシブ/ファーム重視/ロームなど）
+- 自分のスキルセットを活かしたトレードパターン（どのスキルをどう当てるか）
+- 対面の危険なスキルとその対処法（避け方、タイミングの見極め）
 - この対面での勝ち筋（どうすれば有利を作れるか、何を目指すべきか）
 - やってはいけないこと（敵の得意パターンにハマらないための注意点）
 

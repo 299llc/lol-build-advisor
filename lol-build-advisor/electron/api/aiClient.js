@@ -13,7 +13,7 @@ const {
   LOCAL_MACRO_STEP1_PROMPT, LOCAL_MACRO_STEP2_PROMPT,
   LOCAL_COACHING_STEP1_PROMPT, LOCAL_COACHING_STEP2_PROMPT,
 } = require('../core/localPrompts')
-const { buildKnowledgeContext, buildMacroKnowledge, getGamePhase } = require('../core/knowledgeDb')
+const { buildKnowledgeContext } = require('../core/knowledgeDb')
 const { AnthropicProvider } = require('./providers/anthropicProvider')
 
 const MODEL_HAIKU = 'claude-haiku-4-5-20251001'
@@ -43,9 +43,6 @@ class AiClient {
     this.rank = null  // プレイヤーのランクティア（ランク別アドバイス用）
     // 試合開始時に生成する10体のチャンプ教科書（試合中キャッシュ）
     this.championKnowledge = null
-    // マクロアドバイス会話セッション（Ollama用）
-    this._macroSession = null
-    this._macroSessionPhase = null
   }
 
   setCoreBuild(coreBuild) { this.coreBuild = coreBuild }
@@ -73,8 +70,6 @@ class AiClient {
     // rank は試合間で維持（clearMatchでリセットしない）
     this.championKnowledge = null
     this._step1Cache = {}  // Step1キャッシュクリア
-    this._macroSession = null
-    this._macroSessionPhase = null
   }
 
   // 共通API呼び出し (プロバイダー経由)
@@ -310,8 +305,9 @@ class AiClient {
       })
     }
 
+    // 設計書9.6: 自由記述（マッチアップ）は高品質モデル
     return this._callApi({
-      model: MODEL_HAIKU, maxTokens: 700, temperature: 0,
+      model: MODEL_SONNET, maxTokens: 700, temperature: 0,
       system: [{ type: 'text', text: MATCHUP_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userContent }],
       timeoutMs: 20000, logType: 'matchup'
@@ -335,48 +331,13 @@ class AiClient {
     const isLocal = this.isLocalLLM()
 
     if (isLocal) {
-      const currentPhase = getGamePhase(this.gameTimeSec)
-      const killDiffMatch = dynamicContent.match(/\(([+-]?\d+)\)/)
-      const killDiff = killDiffMatch ? parseInt(killDiffMatch[1]) : 0
-      const availableObjectives = typeof structuredInput === 'object' && structuredInput?.objectives?.available
-        ? structuredInput.objectives.available
-        : undefined
-      const macroKnowledge = buildMacroKnowledge(this.position || 'MID', this.gameTimeSec, killDiff, this.rank, availableObjectives)
-
-      // セッション初期化（試合最初の呼び出し）
-      if (!this._macroSession) {
-        this._initMacroSession(staticContext, this.championKnowledge, macroKnowledge, currentPhase)
-      }
-
-      // セッション対応のメッセージ配列を構築
-      const step1Messages = this._buildMacroSessionMessages(dynamicContent, macroKnowledge, currentPhase)
-
-      // Step1: 自由文分析（セッション会話）
-      const analysis = await this._callApi({
-        model: MODEL_HAIKU, maxTokens: 600, temperature: 0.7,
-        system: LOCAL_MACRO_STEP1_PROMPT, messages: step1Messages,
-        timeoutMs: 60000, logType: 'macro-step1', rawText: true,
-        sessionInfo: {
-          turns: Math.floor(this._macroSession.length / 2),
-          phase: currentPhase,
-          totalMessages: step1Messages.length,
-        }
-      })
-      if (!analysis) return null
-
-      // Step1成功 → 会話履歴に追記
-      this._macroSession.push(
-        { role: 'user', content: dynamicContent },
-        { role: 'assistant', content: analysis }
-      )
-      this._trimMacroSession()
-
-      // Step2: JSON化（ステートレス）
-      return this._callApi({
-        model: MODEL_HAIKU, maxTokens: 300, temperature: 0.3,
-        system: LOCAL_MACRO_STEP2_PROMPT,
-        messages: [{ role: 'user', content: analysis }],
-        timeoutMs: 30000, logType: 'macro-step2'
+      // ステートレス: 毎回1メッセージで送信（セッション撤去済み）
+      return this._twoStepLocal({
+        step1System: LOCAL_MACRO_STEP1_PROMPT,
+        step2System: LOCAL_MACRO_STEP2_PROMPT,
+        messages: [{ role: 'user', content: dynamicContent }],
+        step1MaxTokens: 500, step2MaxTokens: 300,
+        logPrefix: 'macro', timeoutMs: 60000
       })
     }
 
@@ -400,58 +361,7 @@ class AiClient {
     })
   }
 
-  /**
-   * マクロセッション初期化 — 試合開始時に静的情報を1回だけ送る
-   */
-  _initMacroSession(staticContext, championKnowledge, macroKnowledge, phase) {
-    const parts = []
-    if (staticContext) parts.push(staticContext)
-    if (championKnowledge) parts.push(championKnowledge)
-    if (macroKnowledge) parts.push(macroKnowledge)
-
-    this._macroSession = [
-      { role: 'user', content: parts.join('\n\n') },
-      { role: 'assistant', content: '了解しました。チーム構成とチャンピオン情報を把握しました。リアルタイムの試合状況を送ってください。' },
-    ]
-    this._macroSessionPhase = phase
-    console.log(`[Macro:session] Initialized (phase=${phase}, staticTokens≈${Math.round(parts.join('\n\n').length / 3)})`)
-  }
-
-  /**
-   * セッション対応のメッセージ配列を構築
-   * フェーズ変更時にmacroKnowledgeを再注入
-   */
-  _buildMacroSessionMessages(dynamicContext, macroKnowledge, currentPhase) {
-    // フェーズ変更 → マクロ知識を更新
-    if (currentPhase !== this._macroSessionPhase && macroKnowledge) {
-      const phaseName = currentPhase === 'early' ? '序盤' : currentPhase === 'mid' ? '中盤' : '終盤'
-      this._macroSession.push(
-        { role: 'user', content: `【フェーズ移行: ${phaseName}】\n${macroKnowledge}` },
-        { role: 'assistant', content: `了解。${phaseName}フェーズの知識を反映します。` }
-      )
-      this._macroSessionPhase = currentPhase
-      console.log(`[Macro:session] Phase updated to ${currentPhase}`)
-    }
-
-    // 現在の動的コンテキストを最新メッセージとして追加（まだ履歴には入れない）
-    return [...this._macroSession, { role: 'user', content: dynamicContext }]
-  }
-
-  /**
-   * セッション履歴のトリム — 最大5ターン(初期2 + 動的交換8メッセージ)に制限
-   */
-  _trimMacroSession() {
-    const MAX_DYNAMIC_MESSAGES = 8 // 4ターン分（user+assistant × 4）
-    const initPair = this._macroSession.slice(0, 2)
-    const rest = this._macroSession.slice(2)
-
-    if (rest.length > MAX_DYNAMIC_MESSAGES) {
-      // 古い交換を削除（2メッセージ=1ターンずつ）
-      const trimmed = rest.slice(rest.length - MAX_DYNAMIC_MESSAGES)
-      this._macroSession = [...initPair, ...trimmed]
-      console.log(`[Macro:session] Trimmed to ${this._macroSession.length} messages`)
-    }
-  }
+  // セッション関連メソッド撤去済み（Ollama KVキャッシュ不在のため）
 
   async getCoaching(structuredInput) {
     // 後方互換: string引数の場合は従来通りテキストとして扱う
@@ -468,10 +378,11 @@ class AiClient {
       })
     }
 
+    // 設計書9.6: 自由記述（コーチング）は高品質モデル
     return this._callApi({
-      model: MODEL_HAIKU,
+      model: MODEL_SONNET,
       maxTokens: 4000,
-      temperature: 0,
+      temperature: 0.3,
       system: COACHING_PROMPT,
       messages: [{ role: 'user', content: userContent }],
       timeoutMs: 60000,

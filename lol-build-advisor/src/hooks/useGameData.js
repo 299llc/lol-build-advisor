@@ -13,6 +13,7 @@ export function useGameData() {
   const [coachingLoading, setCoachingLoading] = useState(false)
   const [substituteError, setSubstituteError] = useState(null)
   const [matchupTip, setMatchupTip] = useState(null)
+  const [matchupLoading, setMatchupLoading] = useState(false)
   const [champSelectExtras, setChampSelectExtras] = useState(null)
   const [macroAdvice, setMacroAdvice] = useState(null)
   const [macroLoading, setMacroLoading] = useState(false)
@@ -49,6 +50,7 @@ export function useGameData() {
       window.electronAPI.onSubstituteItems?.(setSubstituteItems),
       window.electronAPI.onChampSelectTeam?.(setChampSelectTeam),
       window.electronAPI.onMatchupTip?.(setMatchupTip),
+      window.electronAPI.onMatchupLoading?.(setMatchupLoading),
       window.electronAPI.onCoachingResult?.(setCoaching),
       window.electronAPI.onCoachingLoading?.(setCoachingLoading),
       window.electronAPI.onSubstituteError?.(setSubstituteError),
@@ -61,5 +63,5 @@ export function useGameData() {
     return () => unsubs.forEach(fn => fn?.())
   }, [])
 
-  return { status, gameData, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, champSelectTeam, coaching, coachingLoading, substituteError, matchupTip, champSelectExtras, macroAdvice, macroLoading, objectivesStatus, ruleAlerts }
+  return { status, gameData, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, champSelectTeam, coaching, coachingLoading, substituteError, matchupTip, matchupLoading, champSelectExtras, macroAdvice, macroLoading, objectivesStatus, ruleAlerts }
 }

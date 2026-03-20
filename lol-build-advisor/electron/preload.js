@@ -94,6 +94,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('matchup:tip', handler)
     return () => ipcRenderer.removeListener('matchup:tip', handler)
   },
+  onMatchupLoading: (cb) => {
+    const handler = (_, data) => cb(data)
+    ipcRenderer.on('matchup:loading', handler)
+    return () => ipcRenderer.removeListener('matchup:loading', handler)
+  },
   onCoachingResult: (cb) => {
     const handler = (_, result) => cb(result)
     ipcRenderer.on('coaching:result', handler)

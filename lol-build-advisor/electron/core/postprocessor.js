@@ -9,6 +9,15 @@
 // マクロアドバイスの禁止パターン（抽象的で意味のないアドバイス）
 const BANNED_PATTERNS = ['マップを見', 'CSを取', 'CSを意識', '気をつけ', '注意しま']
 
+// 敬語統一用のパターン（である調 → ですます調）
+const KEIGO_REPLACEMENTS = [
+  [/だ。/g, 'です。'],
+  [/である。/g, 'です。'],
+  [/する。$/gm, 'します。'],
+  [/しろ。/g, 'してください。'],
+  [/せよ。/g, 'してください。'],
+]
+
 class Postprocessor {
   constructor() {
     this.lastItemResult = null
@@ -32,7 +41,7 @@ class Postprocessor {
       filtered.push({
         id: item.id,
         reason: (typeof item.reason === 'string' && item.reason.length > 0)
-          ? this._truncate(item.reason, 100)
+          ? this._toOneSentence(item.reason)
           : '推奨'
       })
     }
@@ -47,7 +56,14 @@ class Postprocessor {
       ? this._truncate(raw.reasoning, 100)
       : ''
 
-    // 7-8. 結果を組み立て、更新して返す
+    // 7. 前回と同じ推薦ならスキップ（UI更新しない）
+    if (previousResult && Array.isArray(previousResult.recommended)) {
+      const prevIds = previousResult.recommended.map(r => r.id).sort().join(',')
+      const currIds = filtered.map(r => r.id).sort().join(',')
+      if (prevIds === currIds) return null // 変化なし → 呼び出し元でスキップ
+    }
+
+    // 8. 結果を組み立て、更新して返す
     const result = {
       recommended: filtered,
       reasoning,
@@ -65,12 +81,12 @@ class Postprocessor {
     // 2. title が文字列でない or 空 → previousResultを返す
     if (typeof raw.title !== 'string' || raw.title.length === 0) return previousResult
 
-    // 3-4. title/desc を切り詰め
+    // 3-4. title/desc を切り詰め + 敬語統一
     const title = this._truncate(raw.title, 10)
-    const desc = this._truncate(raw.desc, 30)
+    const desc = this._normalizeKeigo(raw.desc || '')
 
-    // 5. warning の整形
-    const warning = typeof raw.warning === 'string' ? raw.warning : ''
+    // 5. warning の整形 + 敬語統一
+    const warning = typeof raw.warning === 'string' ? this._normalizeKeigo(raw.warning) : ''
 
     // 6. confidence フィルタ: "low" → previousResultを返す
     if (raw.confidence === 'low') return previousResult
@@ -191,17 +207,17 @@ class Postprocessor {
       }
     }
     const champ = opponentData.champion
-    const skills = opponentData.danger_skills || []
+    const spells = opponentData.skills?.spells || []
     const spikes = opponentData.power_spikes || []
 
-    const tips = skills.slice(0, 3).map(s => `${s.name}(${s.key})に注意`)
+    const tips = spells.slice(0, 3).map(s => `${s.name}(${s.key})に注意`)
     while (tips.length < 3) tips.push('無理なトレードを避ける')
 
     return {
       summary: `${champ}との対面`,
       tips,
-      playstyle: opponentData.weakness ? `${opponentData.weakness}を突く` : '慎重にファーム重視でプレイ',
-      danger: skills[0] ? `${skills[0].name}(${skills[0].key})が脅威` : '敵のオールインに注意',
+      playstyle: '慎重にファーム重視でプレイ',
+      danger: spells[0] ? `${spells[0].name}(${spells[0].key})が脅威` : '敵のオールインに注意',
       power_spike: spikes[0] || 'Lv6が敵のスパイク',
     }
   }
@@ -209,6 +225,23 @@ class Postprocessor {
   _truncate(str, maxLen) {
     if (typeof str !== 'string') return ''
     return str.length > maxLen ? str.substring(0, maxLen) : str
+  }
+
+  /** 1文に圧縮する（最初の句点で切る） */
+  _toOneSentence(str) {
+    if (typeof str !== 'string') return ''
+    const match = str.match(/^[^。]+。?/)
+    return match ? match[0] : str.substring(0, 50)
+  }
+
+  /** 敬語統一（ですます調） */
+  _normalizeKeigo(str) {
+    if (typeof str !== 'string') return ''
+    let result = str
+    for (const [pattern, replacement] of KEIGO_REPLACEMENTS) {
+      result = result.replace(pattern, replacement)
+    }
+    return result
   }
 
   // === リセット ===

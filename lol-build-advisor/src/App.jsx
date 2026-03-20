@@ -11,7 +11,7 @@ import { CompactView } from './components/CompactView'
 const isCompact = new URLSearchParams(window.location.search).has('compact')
 
 export default function App() {
-  const { status, gameData, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, champSelectTeam, coaching, coachingLoading, substituteError, matchupTip, champSelectExtras, macroAdvice, macroLoading, objectivesStatus, ruleAlerts } = useGameData()
+  const { status, gameData, coreBuild, aiSuggestion, aiLoading, positionSelectChamp, substituteItems, champSelectTeam, coaching, coachingLoading, substituteError, matchupTip, matchupLoading, champSelectExtras, macroAdvice, macroLoading, objectivesStatus, ruleAlerts } = useGameData()
   const [showSettings, setShowSettings] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [showOverlayPreview, setShowOverlayPreview] = useState(false)
@@ -75,6 +75,7 @@ export default function App() {
             coachingLoading={coachingLoading}
             substituteError={substituteError}
             matchupTip={matchupTip}
+            matchupLoading={matchupLoading}
             macroAdvice={macroAdvice}
             macroLoading={macroLoading}
             objectivesStatus={objectivesStatus}

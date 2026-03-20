@@ -695,7 +695,8 @@ async function requestCoaching(snapshot) {
     // GameStateが残っていなければsnapshotから再構築
     const gameState = state.currentGameState || state.preprocessor.buildGameState(
       { activePlayer: snapshot.activePlayer, allPlayers: snapshot.allPlayers || [me, ...(players.allies || []), ...(players.enemies || [])], gameData: gd },
-      gd?.events?.Events || []
+      gd?.events?.Events || [],
+      { spectatorSelectedName: state.spectatorSelectedName || null }
     )
 
     const events = gd?.events?.Events || []
@@ -1248,7 +1249,9 @@ async function handleGameData(gameData) {
   }
 
   // GameState構築（毎ポーリング）
-  const gameState = state.preprocessor.buildGameState(gameData, events)
+  const gameState = state.preprocessor.buildGameState(gameData, events, {
+    spectatorSelectedName: isSpectator ? state.spectatorSelectedName : null
+  })
   state.currentGameState = gameState
 
   // 60秒間隔でスナップショット蓄積（コーチング用）
@@ -1449,19 +1452,27 @@ function handleMatchupTip(me, resolvedPosition, enemies) {
   const structuredInput = state.preprocessor.buildMatchupInput(gameState, spellData)
   console.log(`[Pipeline] MatchupTip input: ${me.enName} vs ${structuredInput.opponent?.champion || '?'} (${resolvedPosition})`)
 
+  broadcast('matchup:loading', { loading: true, opponent: laneOpponent.championName })
+
   state.aiClient.getMatchupTip(structuredInput).then(rawTip => {
     // 後処理
     const tip = state.postprocessor.processMatchupResult(rawTip, structuredInput.opponent)
 
     if (tip) {
       tip.opponent = laneOpponent.championName
+      tip.myChampion = me.championName
+      tip.mySkills = structuredInput.me?.skills || null
+      tip.opponentSkills = structuredInput.opponent?.skills || null
+      broadcast('matchup:loading', false)
       broadcast('matchup:tip', tip)
       console.log(`[Pipeline] MatchupTip processed: ${me.enName} vs ${laneOpponent.enName}: ${tip.summary}`)
     } else {
+      broadcast('matchup:loading', false)
       console.warn('[Pipeline] MatchupTip postprocessor returned null, will retry')
       state.matchupTipLoaded = false
     }
   }).catch(err => {
+    broadcast('matchup:loading', false)
     if (err.authError) {
       console.error('[MatchupTip] Auth error - stopping retries. Check provider settings.')
       state.aiEnabled = false
