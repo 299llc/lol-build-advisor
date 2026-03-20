@@ -19,6 +19,8 @@ const { MACRO_INTERVAL_MS, MACRO_DEBOUNCE_MS, COUNTER_ITEMS, ITEM_COMPLETE_GOLD,
 const { SessionRecorder } = require('./core/sessionRecorder')
 const { GameLogger } = require('./core/gameLogger')
 const { AdManager } = require('./api/adManager')
+const { Preprocessor } = require('./core/preprocessor')
+const { Postprocessor } = require('./core/postprocessor')
 
 // ── ゲームロガー（console.log フック）──────────────
 const gameLogger = new GameLogger(app.getPath('userData'))
@@ -100,6 +102,11 @@ const state = {
 
   // セッションレコーダー
   recorder: null,
+
+  // 3層パイプライン
+  preprocessor: new Preprocessor(),
+  postprocessor: new Postprocessor(),
+  currentGameState: null,
 }
 
 // ── 設定 ──────────────────────────────────────────
@@ -580,6 +587,10 @@ function resetBuildState() {
   if (state.aiClient) state.aiClient.clearMatch()
   // ルールエンジンリセット
   if (state.ruleEngine) state.ruleEngine.reset()
+  // パイプラインリセット
+  state.preprocessor.reset()
+  state.postprocessor.reset()
+  state.currentGameState = null
   // Renderer側もクリア
   if (state.mainWindow) {
     state.mainWindow.webContents.send('core:build', null)
@@ -614,24 +625,30 @@ async function requestMacroAdvice(gameData, me, allies, enemies) {
   broadcast('macro:loading', true)
 
   try {
-    const staticCtx = buildMacroStaticContext(me, allies, enemies)
-    const dynamicCtx = buildMacroDynamicContext(gameData, me, allies, enemies)
+    const gameState = state.currentGameState
     const events = gameData.events?.Events || []
     const gameTime = gameData.gameData?.gameTime || 0
-    const availableObjectives = getAvailableObjectiveNames(events, gameTime)
-    let advice = await state.aiClient.getMacroAdvice(staticCtx, dynamicCtx, availableObjectives)
 
-    // バリデーション: LLMの出力が使えるか検証
-    if (advice && typeof advice === 'object') {
-      // title/descが欠けている場合は無効
-      if (!advice.title || !advice.desc) {
-        macroLog(`Validation failed: missing title/desc - ${JSON.stringify(advice).substring(0, 200)}`)
-        advice = null
-      }
-    }
+    // 前処理: 構造化入力を生成
+    const structuredInput = state.preprocessor.buildMacroInput(gameState, events)
+    console.log(`[Pipeline] Macro input: phase=${structuredInput.game_phase} situation=${structuredInput.situation} actions=${structuredInput.action_candidates.map(c => c.action).join(',')}`)
+
+    // staticContextはcache_control用に引き続き使う
+    const staticCtx = buildMacroStaticContext(me, allies, enemies)
+
+    // 推論
+    let rawResult = await state.aiClient.getMacroAdvice(staticCtx, structuredInput)
+
+    // 後処理
+    const actionCandidates = structuredInput.action_candidates.map(c => c.action)
+    const previousResult = state.postprocessor.lastMacroResult
+    const advice = state.postprocessor.processMacroResult(rawResult, actionCandidates, previousResult)
 
     if (advice) {
-      macroLog(`Raw: ${JSON.stringify(advice).substring(0, 300)}`)
+      // 次回フィードバック用に保存
+      state.preprocessor.setMacroAdvice(advice)
+
+      macroLog(`[Pipeline] Processed: ${JSON.stringify(advice).substring(0, 300)}`)
       advice.gameTime = gameTime
       broadcast('macro:advice', advice)
       macroLog(`Sent: ${advice.title}`)
@@ -643,9 +660,9 @@ async function requestMacroAdvice(gameData, me, allies, enemies) {
         const top = ruleAlerts[0]
         const fallback = { title: top.title, desc: top.desc, warning: top.warning || '', gameTime, _fallback: true }
         broadcast('macro:advice', fallback)
-        macroLog(`Fallback to ruleEngine: ${top.title}`)
+        macroLog(`[Pipeline] Fallback to ruleEngine: ${top.title}`)
       } else {
-        macroLog('API returned null, no ruleEngine fallback available')
+        macroLog('[Pipeline] Postprocessor returned null, no ruleEngine fallback available')
       }
     }
   } catch (err) {
@@ -668,170 +685,58 @@ async function requestCoaching(snapshot) {
   if (!state.aiClient || !snapshot) return
 
   const { players, gameData: gd } = snapshot
-  const { me, allies, enemies } = players || {}
+  const { me } = players || {}
   if (!me) return
 
-  const gameTime = gd?.gameTime || 0
-  const minutes = Math.floor(gameTime / 60)
-  const myItems = (me.items || []).filter(i => i.itemID > 0).map(i => i.displayName).join(', ')
-  const myKDA = me.scores ? `${me.scores.kills}/${me.scores.deaths}/${me.scores.assists}` : '不明'
-  const myCS = me.scores?.creepScore || 0
-
-  const allAllies = [me, ...(allies || [])]
-  const allyKills = allAllies.reduce((s, p) => s + (p.scores?.kills || 0), 0)
-  const enemyKills = (enemies || []).reduce((s, p) => s + (p.scores?.kills || 0), 0)
-  const myKillParticipation = allyKills > 0
-    ? Math.round(((me.scores?.kills || 0) + (me.scores?.assists || 0)) / allyKills * 100) : 0
-
-  const formatPlayer = (p) => {
-    const items = (p.items || []).filter(i => i.itemID > 0).map(i => i.displayName).join(', ')
-    const kda = p.scores ? `${p.scores.kills}/${p.scores.deaths}/${p.scores.assists}` : '?'
-    const cs = p.scores?.creepScore || 0
-    const csPerMin = minutes > 0 ? (cs / minutes).toFixed(1) : '0'
-    const ward = p.scores?.wardScore != null ? ` ワード:${Math.round(p.scores.wardScore)}` : ''
-    const flags = p.flags?.length ? ` [${p.flags.join(',')}]` : ''
-    return `${p.championName} (${p.position || '?'}) KDA:${kda} CS:${cs}(${csPerMin}/min)${ward} Lv${p.level} ${items}${flags}`
-  }
-
-  // --- チャンプスキル情報を構築 ---
-  const champSkillLines = []
-  const allPlayers = [me, ...(allies || []), ...(enemies || [])]
-  for (const p of allPlayers) {
-    const spells = getSpells(p.enName)
-    if (!spells) continue
-    const skillTexts = spells.spells.map(s => `${s.key}:${s.name}(${s.desc.substring(0, 40)})`).join(' ')
-    champSkillLines.push(`${p.championName}: ${skillTexts}`)
-  }
-
-  // --- 試合に登場したアイテム辞書を構築 ---
-  const itemIds = new Set()
-  // 全プレイヤーのアイテムを収集
-  for (const p of allPlayers) {
-    for (const item of (p.items || [])) {
-      if (item.itemID > 0) itemIds.add(String(item.itemID))
-    }
-  }
-  // コアビルドのアイテムも追加
-  if (state.currentCoreBuild?.ids) {
-    for (const id of state.currentCoreBuild.ids) itemIds.add(String(id))
-  }
-  // カウンターアイテム候補も追加（敵フラグに応じて）
-  const enemyFlags = new Set()
-  for (const e of (enemies || [])) {
-    for (const f of (e.flags || [])) enemyFlags.add(f)
-  }
-  for (const [flag, ids] of Object.entries(COUNTER_ITEMS)) {
-    if (enemyFlags.has(flag)) {
-      for (const id of ids) itemIds.add(String(id))
-    }
-  }
-  // アイテム辞書テキスト生成
-  const itemDictLines = []
-  for (const id of itemIds) {
-    const summary = formatItemSummary(id)
-    if (!summary || summary.gold < 400) continue // 素材アイテムの詳細説明は省略
-    itemDictLines.push(`${summary.name}(${summary.gold}G): ${summary.stats} / ${summary.desc}`)
-  }
-
-  const isLocal = state.aiClient?.isLocalLLM?.()
-
-  const lines = [
-    // ローカルLLMでは参照データを省略（コンテキストが大きすぎるとフォーマット指示を忘れる）
-    ...(!isLocal ? [
-      `【参照: チャンピオンスキル情報】`,
-      ...champSkillLines,
-      '',
-      `【参照: アイテム辞書】`,
-      ...itemDictLines,
-      '',
-    ] : []),
-    `=== 以下の試合データを評価してください ===`,
-    `試合時間: ${minutes}分`,
-    ...(state.aiClient?.rank ? [`プレイヤーランク: ${state.aiClient.rank}`] : []),
-    '',
-    `【自分】${me.championName} (${me.position || '?'})`,
-    `KDA: ${myKDA}`,
-    `CS: ${myCS} (${minutes > 0 ? (myCS / minutes).toFixed(1) : 0}/min)`,
-    `レベル: ${me.level}`,
-    `ワードスコア: ${me.scores?.wardScore != null ? Math.round(me.scores.wardScore) : '不明'}`,
-    `アイテム: ${myItems || 'なし'}`,
-    '',
-    ...(state.currentCoreBuild ? [`【推奨コアビルド(OP.GG統計)】${state.currentCoreBuild.names.join(', ')}`, ''] : []),
-    `チームキル: 味方${allyKills} vs 敵${enemyKills}`,
-    `キル参加率: ${myKillParticipation}%`,
-    '',
-    `【味方チーム】`,
-    ...(allies || []).map(formatPlayer),
-    '',
-    `【敵チーム】`,
-    ...(enemies || []).map(formatPlayer),
-    '',
-    // イベントタイムライン（キル/オブジェクト）を追加
-    ...(() => {
-      const events = gd?.events?.Events || snapshot.events?.Events || []
-      const timeline = []
-      for (const ev of events) {
-        const t = Math.floor(ev.EventTime || 0)
-        const min = Math.floor(t / 60)
-        const sec = String(t % 60).padStart(2, '0')
-        const time = `${min}:${sec}`
-        if (ev.EventName === 'ChampionKill') {
-          const assists = ev.Assisters?.length ? ` (アシスト: ${ev.Assisters.join(', ')})` : ''
-          timeline.push(`${time} キル: ${ev.KillerName} → ${ev.VictimName}${assists}`)
-        } else if (ev.EventName === 'DragonKill') {
-          const stolen = ev.Stolen ? ' [スティール]' : ''
-          timeline.push(`${time} ドラゴン討伐: ${ev.KillerName}${stolen}`)
-        } else if (ev.EventName === 'BaronKill') {
-          const stolen = ev.Stolen ? ' [スティール]' : ''
-          timeline.push(`${time} バロン討伐: ${ev.KillerName}${stolen}`)
-        } else if (ev.EventName === 'HeraldKill') {
-          timeline.push(`${time} ヘラルド討伐: ${ev.KillerName}`)
-        } else if (ev.EventName === 'TurretKilled') {
-          timeline.push(`${time} タワー破壊: ${ev.TurretKilled}`)
-        } else if (ev.EventName === 'InhibKilled') {
-          timeline.push(`${time} インヒビター破壊: ${ev.InhibKilled}`)
-        }
-      }
-      if (timeline.length === 0) return []
-      // 最大30イベント（直近を優先）
-      const recent = timeline.length > 30 ? timeline.slice(-30) : timeline
-      return ['【試合タイムライン】', ...recent, '']
-    })(),
-    `上記の試合データを評価してJSONのみ返答してください。`
-  ]
-
-  console.log('[Coaching] Requesting post-game evaluation...')
+  console.log('[Pipeline] Requesting coaching evaluation...')
   broadcast('coaching:loading', true)
 
   try {
-    const result = await state.aiClient.getCoaching(lines.join('\n'))
+    // GameStateが残っていなければsnapshotから再構築
+    const gameState = state.currentGameState || state.preprocessor.buildGameState(
+      { activePlayer: snapshot.activePlayer, allPlayers: snapshot.allPlayers || [me, ...(players.allies || []), ...(players.enemies || [])], gameData: gd },
+      gd?.events?.Events || []
+    )
+
+    const events = gd?.events?.Events || []
+    const coreBuild = state.currentCoreBuild
+      ? state.currentCoreBuild.ids.map((id, i) => ({ id, name: state.currentCoreBuild.names[i] }))
+      : []
+
+    // 前処理: 構造化入力を生成
+    const structuredInput = state.preprocessor.buildCoachingInput(gameState, state.preprocessor.gameLog, coreBuild, events)
+    console.log(`[Pipeline] Coaching input: duration=${structuredInput.game_duration}s phase=${structuredInput.game_phase_final} snapshots=${structuredInput.snapshot_count}`)
+
+    // 推論
+    const rawResult = await state.aiClient.getCoaching(structuredInput)
+
+    // 後処理
+    const result = state.postprocessor.processCoachingResult(rawResult)
+
     if (result) {
-      console.log(`[Coaching] Raw keys: ${Object.keys(result).join(', ')}`)
-      console.log(`[Coaching] Raw JSON: ${JSON.stringify(result).substring(0, 500)}`)
-      console.log(`[Coaching] Score: ${result.overall_score}/10 Build: ${result.build_score || '?'}/10`)
+      console.log(`[Pipeline] Coaching processed: score=${result.overall_score}/10 build=${result.build_score}/10`)
       if (result.sections) {
         for (const s of result.sections) {
-          console.log(`[Coaching] [${s.grade || '?'}] ${s.title}: ${(s.content || '').substring(0, 120)}`)
+          console.log(`[Pipeline] Coaching [${s.grade || '?'}] ${s.title}: ${(s.content || '').substring(0, 120)}`)
         }
       }
       if (result.good_points) {
-        result.good_points.forEach((p, i) => console.log(`[Coaching] Good${i+1}: ${p.substring(0, 120)}`))
+        result.good_points.forEach((p, i) => console.log(`[Pipeline] Coaching Good${i+1}: ${p.substring(0, 120)}`))
       }
       if (result.improve_points) {
-        result.improve_points.forEach((p, i) => console.log(`[Coaching] Improve${i+1}: ${p.substring(0, 120)}`))
+        result.improve_points.forEach((p, i) => console.log(`[Pipeline] Coaching Improve${i+1}: ${p.substring(0, 120)}`))
       }
       if (result.next_game_advice) {
-        console.log(`[Coaching] NextGame: ${result.next_game_advice.substring(0, 150)}`)
+        console.log(`[Pipeline] Coaching NextGame: ${result.next_game_advice.substring(0, 150)}`)
       }
       broadcast('coaching:result', result)
       saveLastGame(snapshot, result)
     } else {
-      console.error('[Coaching] No result returned')
+      console.error('[Pipeline] Coaching postprocessor returned null')
       saveLastGame(snapshot, null)
     }
   } catch (err) {
-    console.error('[Coaching] Error:', err.message)
-    // エラー時も試合データを保存（古いコーチング結果が残らないように）
+    console.error('[Pipeline] Coaching error:', err.message)
     saveLastGame(snapshot, null)
   } finally {
     broadcast('coaching:loading', false)
@@ -1342,6 +1247,13 @@ async function handleGameData(gameData) {
     gameData.events.Events = events
   }
 
+  // GameState構築（毎ポーリング）
+  const gameState = state.preprocessor.buildGameState(gameData, events)
+  state.currentGameState = gameState
+
+  // 60秒間隔でスナップショット蓄積（コーチング用）
+  state.preprocessor.recordSnapshot(gameState, gt)
+
   // AI提案
   handleAiSuggestion(gameData)
 
@@ -1524,33 +1436,29 @@ function handleMatchupTip(me, resolvedPosition, enemies) {
   if (!laneOpponent) return
 
   state.matchupTipLoaded = true
-  console.log(`[MatchupTip] Requesting: ${me.enName} vs ${laneOpponent.enName} (${resolvedPosition})`)
 
-  // ローカルLLM向け: スキル情報を追加してハルシネーション防止
-  const skillLines = []
-  if (state.aiClient?.isLocalLLM?.()) {
-    for (const champ of [me, laneOpponent]) {
-      const spells = getSpells(champ.enName)
-      if (spells) {
-        const passive = `パッシブ:${spells.passive.name}`
-        const skills = spells.spells.map(s => `${s.key}:${s.name}(${s.desc.substring(0, 60)})`).join(' ')
-        skillLines.push(`【${champ.championName}のスキル】${passive} ${skills}`)
-      }
-    }
+  const gameState = state.currentGameState
+  if (!gameState) {
+    console.warn('[Pipeline] MatchupTip: no gameState available, will retry')
+    state.matchupTipLoaded = false
+    return
   }
 
-  const tipContext = [
-    ...(skillLines.length > 0 ? [...skillLines, ''] : []),
-    `自分: ${me.championName} (${resolvedPosition})`,
-    `対面: ${laneOpponent.championName} (${laneOpponent.enName})`
-  ].join('\n')
-  state.aiClient.getMatchupTip(tipContext).then(tip => {
+  // 前処理: 構造化入力を生成
+  const spellData = getSpells(laneOpponent.enName)
+  const structuredInput = state.preprocessor.buildMatchupInput(gameState, spellData)
+  console.log(`[Pipeline] MatchupTip input: ${me.enName} vs ${structuredInput.opponent?.champion || '?'} (${resolvedPosition})`)
+
+  state.aiClient.getMatchupTip(structuredInput).then(rawTip => {
+    // 後処理
+    const tip = state.postprocessor.processMatchupResult(rawTip, structuredInput.opponent)
+
     if (tip) {
       tip.opponent = laneOpponent.championName
       broadcast('matchup:tip', tip)
-      console.log(`[MatchupTip] ${me.enName} vs ${laneOpponent.enName}: ${tip.summary}`)
+      console.log(`[Pipeline] MatchupTip processed: ${me.enName} vs ${laneOpponent.enName}: ${tip.summary}`)
     } else {
-      console.warn('[MatchupTip] API returned null, will retry')
+      console.warn('[Pipeline] MatchupTip postprocessor returned null, will retry')
       state.matchupTipLoaded = false
     }
   }).catch(err => {
@@ -1578,11 +1486,29 @@ function handleAiSuggestion(gameData) {
   if (completedItems < 3) return
 
   if ((triggered || !state.lastSuggestion) && !state.aiPending && state.aiClient && state.aiEnabled && state.currentCoreBuild) {
-    const context = state.contextBuilder.build(gameData)
+    const gameState = state.currentGameState
+    if (!gameState) return
+
+    // 前処理: 構造化入力を生成
+    const coreBuild = state.currentCoreBuild.ids.map((id, i) => ({ id, name: state.currentCoreBuild.names[i] }))
+    const substituteItems = state.aiClient.getSubstituteItems() || []
+    const structuredInput = state.preprocessor.buildItemInput(gameState, coreBuild, substituteItems)
+    const candidateIds = structuredInput.candidates.map(c => c.id)
+    console.log(`[Pipeline] Item input: candidates=[${candidateIds.join(',')}] situation=${structuredInput.situation}`)
+
     state.aiPending = true
     broadcast('ai:loading', true)
-    state.aiClient.getSuggestion(context).then(s => {
-      if (s) {
+    state.aiClient.getSuggestion(structuredInput).then(rawResult => {
+      // 後処理
+      const previousResult = state.postprocessor.lastItemResult
+      const processedResult = state.postprocessor.processItemResult(rawResult, candidateIds, previousResult)
+
+      if (processedResult) {
+        // 次回フィードバック用に保存
+        state.preprocessor.setItemAdvice(processedResult)
+
+        // UIに送るデータを整形
+        const s = { ...processedResult }
         if (s.recommended) {
           s.recommended = s.recommended.map(r => {
             const item = getItemById(String(r.id))
@@ -1590,9 +1516,12 @@ function handleAiSuggestion(gameData) {
           })
         }
         s.gameTime = gameData.gameData?.gameTime || 0
+        // 推薦蓄積（既存互換）
+        s.history = rawResult?.history || {}
+        s.totalCalls = rawResult?.totalCalls || 0
         state.lastSuggestion = s
         const recNames = (s.recommended || []).map(r => r.name || r.id).join(', ')
-        console.log(`[AiSuggestion] t=${Math.floor(s.gameTime)}s recommended=[${recNames}] reason=${(s.reasoning || '').substring(0, 80)}`)
+        console.log(`[Pipeline] Item processed: t=${Math.floor(s.gameTime)}s recommended=[${recNames}] reason=${(s.reasoning || '').substring(0, 80)}`)
         broadcast('ai:suggestion', s)
       }
       state.aiPending = false

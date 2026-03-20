@@ -175,7 +175,7 @@ class AiClient {
     // Step1キャッシュ: userMessageのハッシュ的な短縮キーで判定
     const userMsg = messages[messages.length - 1]?.content || ''
     // キル差・レベル・オブジェクト状態を含む短いキーを生成
-    const cacheKey = `${logPrefix}:${userMsg.length}:${userMsg.substring(0, 200)}`
+    const cacheKey = `${logPrefix}:${userMsg.length}:${typeof userMsg === 'string' ? userMsg.substring(0, 200) : JSON.stringify(userMsg).substring(0, 200)}`
     const cached = this._step1Cache?.[logPrefix]
 
     let analysis
@@ -235,8 +235,11 @@ class AiClient {
     return this.provider.validate()
   }
 
-  async getSuggestion(dynamicContext) {
-    const userMessage = this._buildUserMessage(dynamicContext)
+  async getSuggestion(structuredInput) {
+    // 後方互換: string引数の場合は従来通りテキストとして扱う
+    const userMessage = typeof structuredInput === 'string'
+      ? this._buildUserMessage(structuredInput)
+      : JSON.stringify(structuredInput, null, 2)
     const isLocal = this.isLocalLLM()
 
     const messages = []
@@ -250,10 +253,6 @@ class AiClient {
       // ローカルLLM: マルチターンを避け、1メッセージにまとめる
       const parts = []
       if (this.matchContext) parts.push(this.matchContext)
-      if (isLocal) {
-        const knowledge = buildKnowledgeContext(this.position || 'MID', this.gameTimeSec)
-        if (knowledge) parts.push(knowledge)
-      }
       parts.push(userMessage)
       messages.push({ role: 'user', content: parts.join('\n\n') })
     }
@@ -296,13 +295,14 @@ class AiClient {
     return suggestion
   }
 
-  async getMatchupTip(matchupContext) {
+  async getMatchupTip(structuredInput) {
+    // 後方互換: string引数の場合は従来通りテキストとして扱う
+    const userContent = typeof structuredInput === 'string'
+      ? structuredInput
+      : JSON.stringify(structuredInput, null, 2)
     const isLocal = this.isLocalLLM()
-    let userContent = matchupContext
-    if (isLocal) {
-      const knowledge = buildKnowledgeContext(this.position || 'MID', 0)
-      userContent = knowledge ? `${knowledge}\n\n${matchupContext}` : matchupContext
 
+    if (isLocal) {
       return this._twoStepLocal({
         step1System: LOCAL_MATCHUP_STEP1_PROMPT, step2System: LOCAL_MATCHUP_STEP2_PROMPT,
         messages: [{ role: 'user', content: userContent }],
@@ -318,13 +318,29 @@ class AiClient {
     })
   }
 
-  async getMacroAdvice(staticContext, dynamicContext, availableObjectives) {
+  async getMacroAdvice(staticContext, structuredInput) {
+    // 後方互換: 第3引数がある場合は旧シグネチャ (staticContext, dynamicContext, availableObjectives)
+    let dynamicContent
+    if (arguments.length >= 3) {
+      // 旧シグネチャ: (staticContext, dynamicContext, availableObjectives)
+      dynamicContent = typeof structuredInput === 'string'
+        ? structuredInput
+        : JSON.stringify(structuredInput, null, 2)
+    } else {
+      // 新シグネチャ: (staticContext, structuredInput)
+      dynamicContent = typeof structuredInput === 'string'
+        ? structuredInput
+        : JSON.stringify(structuredInput, null, 2)
+    }
     const isLocal = this.isLocalLLM()
 
     if (isLocal) {
       const currentPhase = getGamePhase(this.gameTimeSec)
-      const killDiffMatch = dynamicContext.match(/\(([+-]?\d+)\)/)
+      const killDiffMatch = dynamicContent.match(/\(([+-]?\d+)\)/)
       const killDiff = killDiffMatch ? parseInt(killDiffMatch[1]) : 0
+      const availableObjectives = typeof structuredInput === 'object' && structuredInput?.objectives?.available
+        ? structuredInput.objectives.available
+        : undefined
       const macroKnowledge = buildMacroKnowledge(this.position || 'MID', this.gameTimeSec, killDiff, this.rank, availableObjectives)
 
       // セッション初期化（試合最初の呼び出し）
@@ -333,7 +349,7 @@ class AiClient {
       }
 
       // セッション対応のメッセージ配列を構築
-      const step1Messages = this._buildMacroSessionMessages(dynamicContext, macroKnowledge, currentPhase)
+      const step1Messages = this._buildMacroSessionMessages(dynamicContent, macroKnowledge, currentPhase)
 
       // Step1: 自由文分析（セッション会話）
       const analysis = await this._callApi({
@@ -350,7 +366,7 @@ class AiClient {
 
       // Step1成功 → 会話履歴に追記
       this._macroSession.push(
-        { role: 'user', content: dynamicContext },
+        { role: 'user', content: dynamicContent },
         { role: 'assistant', content: analysis }
       )
       this._trimMacroSession()
@@ -364,16 +380,16 @@ class AiClient {
       })
     }
 
-    // Claude API パス（変更なし）
+    // Claude API パス
     const messages = []
     if (staticContext) {
       messages.push(
         { role: 'user', content: [{ type: 'text', text: staticContext, cache_control: { type: 'ephemeral' } }] },
         { role: 'assistant', content: '了解。リアルタイムの試合状況を送ってください。' },
-        { role: 'user', content: dynamicContext }
+        { role: 'user', content: dynamicContent }
       )
     } else {
-      messages.push({ role: 'user', content: dynamicContext })
+      messages.push({ role: 'user', content: dynamicContent })
     }
 
     return this._callApi({
@@ -437,13 +453,17 @@ class AiClient {
     }
   }
 
-  async getCoaching(gameContext) {
+  async getCoaching(structuredInput) {
+    // 後方互換: string引数の場合は従来通りテキストとして扱う
+    const userContent = typeof structuredInput === 'string'
+      ? structuredInput
+      : JSON.stringify(structuredInput, null, 2)
     const isLocal = this.isLocalLLM()
 
     if (isLocal) {
       return this._twoStepLocal({
         step1System: LOCAL_COACHING_STEP1_PROMPT, step2System: LOCAL_COACHING_STEP2_PROMPT,
-        messages: [{ role: 'user', content: gameContext }],
+        messages: [{ role: 'user', content: userContent }],
         step1MaxTokens: 1500, step2MaxTokens: 800, logPrefix: 'coaching', timeoutMs: 120000
       })
     }
@@ -453,7 +473,7 @@ class AiClient {
       maxTokens: 4000,
       temperature: 0,
       system: COACHING_PROMPT,
-      messages: [{ role: 'user', content: gameContext }],
+      messages: [{ role: 'user', content: userContent }],
       timeoutMs: 60000,
       logType: 'coaching'
     })

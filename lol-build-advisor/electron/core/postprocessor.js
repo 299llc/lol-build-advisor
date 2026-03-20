@@ -1,0 +1,221 @@
+/**
+ * Postprocessor - LLM出力のバリデーション・フィルタ・整形
+ *
+ * LLMの生出力を受け取り、不正データの除外・文字数制限・confidence判定・
+ * フォールバック生成を行い、UIに安全なデータを渡す後処理層。
+ * 外部依存なし。純粋なバリデーション・整形ロジックのみ。
+ */
+
+// マクロアドバイスの禁止パターン（抽象的で意味のないアドバイス）
+const BANNED_PATTERNS = ['マップを見', 'CSを取', 'CSを意識', '気をつけ', '注意しま']
+
+class Postprocessor {
+  constructor() {
+    this.lastItemResult = null
+    this.lastMacroResult = null
+  }
+
+  // === アイテム提案の後処理 ===
+  processItemResult(raw, candidateIds, previousResult) {
+    // 1. rawがnullまたはオブジェクトでない → previousResultを返す
+    if (!raw || typeof raw !== 'object') return previousResult
+
+    // 2. recommended が配列でない → previousResultを返す
+    if (!Array.isArray(raw.recommended)) return previousResult
+
+    // 3. recommended の各要素をフィルタ・整形
+    const filtered = []
+    for (const item of raw.recommended) {
+      // id が candidateIds に含まれない → 除外
+      if (!candidateIds || !candidateIds.includes(item.id)) continue
+
+      filtered.push({
+        id: item.id,
+        reason: (typeof item.reason === 'string' && item.reason.length > 0)
+          ? this._truncate(item.reason, 100)
+          : '推奨'
+      })
+    }
+
+    // 4. confidence フィルタ
+    const confidence = raw.confidence
+    if (confidence === 'low') return previousResult
+    const lowConfidence = confidence === 'medium'
+
+    // 5-6. action（reasoning）の整形
+    const reasoning = (typeof raw.reasoning === 'string' && raw.reasoning.length > 0)
+      ? this._truncate(raw.reasoning, 100)
+      : ''
+
+    // 7-8. 結果を組み立て、更新して返す
+    const result = {
+      recommended: filtered,
+      reasoning,
+      lowConfidence,
+    }
+    this.lastItemResult = result
+    return result
+  }
+
+  // === マクロアドバイスの後処理 ===
+  processMacroResult(raw, actionCandidates, previousResult) {
+    // 1. rawがnull → previousResultを返す
+    if (!raw || typeof raw !== 'object') return previousResult
+
+    // 2. title が文字列でない or 空 → previousResultを返す
+    if (typeof raw.title !== 'string' || raw.title.length === 0) return previousResult
+
+    // 3-4. title/desc を切り詰め
+    const title = this._truncate(raw.title, 10)
+    const desc = this._truncate(raw.desc, 30)
+
+    // 5. warning の整形
+    const warning = typeof raw.warning === 'string' ? raw.warning : ''
+
+    // 6. confidence フィルタ: "low" → previousResultを返す
+    if (raw.confidence === 'low') return previousResult
+
+    // 7. action が actionCandidates に含まれない → actionCandidates[0] を使用
+    let action = raw.action
+    if (Array.isArray(actionCandidates) && actionCandidates.length > 0) {
+      if (!actionCandidates.includes(action)) {
+        action = actionCandidates[0]
+      }
+    }
+
+    // 8. 禁止表現チェック: title/desc に抽象論が含まれていたら除去
+    const combined = title + desc
+    for (const pattern of BANNED_PATTERNS) {
+      if (combined.includes(pattern)) return previousResult
+    }
+
+    // 9. 前回と同じactionの場合: title/desc/warningはpreviousResultを維持
+    if (previousResult && previousResult.action === action) {
+      const updated = {
+        ...previousResult,
+        updatedAt: Date.now(),
+      }
+      this.lastMacroResult = updated
+      return updated
+    }
+
+    // 10-11. 結果を組み立て、更新して返す
+    const result = {
+      action,
+      title,
+      desc,
+      warning,
+      updatedAt: Date.now(),
+    }
+    this.lastMacroResult = result
+    return result
+  }
+
+  // === マッチアップTipの後処理 ===
+  processMatchupResult(raw, opponentData) {
+    // 1. rawがnull → フォールバック生成
+    if (!raw || typeof raw !== 'object') {
+      return this._generateFallbackTip(opponentData)
+    }
+
+    // 2. tips が配列でない or 3つ未満 → フォールバック生成
+    if (!Array.isArray(raw.tips) || raw.tips.length < 3) {
+      return this._generateFallbackTip(opponentData)
+    }
+
+    // 3. 各フィールドの文字数チェック
+    return {
+      summary: this._truncate(raw.summary, 50),
+      tips: raw.tips.map(t => this._truncate(t, 80)),
+      playstyle: this._truncate(raw.playstyle, 100),
+      danger: this._truncate(raw.danger, 80),
+      power_spike: this._truncate(raw.power_spike, 80),
+    }
+  }
+
+  // === コーチングの後処理 ===
+  processCoachingResult(raw) {
+    // 1. rawがnull → nullを返す（リトライに任せる）
+    if (!raw || typeof raw !== 'object') return null
+
+    // 2. overall_score: 数値でなければ5、範囲外(1-10)ならクランプ
+    let overallScore = typeof raw.overall_score === 'number' ? raw.overall_score : 5
+    overallScore = Math.max(1, Math.min(10, Math.round(overallScore)))
+
+    // 3. build_score: 同上
+    let buildScore = typeof raw.build_score === 'number' ? raw.build_score : 5
+    buildScore = Math.max(1, Math.min(10, Math.round(buildScore)))
+
+    // 4. sections: 配列でなければ空配列
+    const validGrades = ['S', 'A', 'B', 'C', 'D']
+    const sections = Array.isArray(raw.sections)
+      ? raw.sections.map(s => ({
+          title: s.title || '',
+          content: s.content || '',
+          grade: validGrades.includes(s.grade) ? s.grade : 'B',
+        }))
+      : []
+
+    // 5. good_points: 配列でなければ空配列
+    const goodPoints = Array.isArray(raw.good_points) ? raw.good_points : []
+
+    // 6. improve_points: 配列でなければ空配列、10文字未満は具体性不足の可能性
+    const improvePoints = Array.isArray(raw.improve_points)
+      ? raw.improve_points.filter(p => typeof p === 'string' && p.length >= 10)
+      : []
+
+    // 7. next_game_advice: 文字列でなければ ""
+    const nextGameAdvice = typeof raw.next_game_advice === 'string' ? raw.next_game_advice : ''
+
+    // 8. 結果を返す
+    return {
+      overall_score: overallScore,
+      build_score: buildScore,
+      sections,
+      good_points: goodPoints,
+      improve_points: improvePoints,
+      next_game_advice: nextGameAdvice,
+    }
+  }
+
+  // === 内部ヘルパー ===
+
+  _generateFallbackTip(opponentData) {
+    if (!opponentData || !opponentData.champion) {
+      return {
+        summary: '対面情報なし',
+        tips: ['敵のスキルを観察する', '無理なトレードを避ける', 'ワードを設置してガンクに備える'],
+        playstyle: '慎重にファーム重視でプレイ',
+        danger: '敵のオールインに注意',
+        power_spike: 'Lv6が敵のスパイク',
+      }
+    }
+    const champ = opponentData.champion
+    const skills = opponentData.danger_skills || []
+    const spikes = opponentData.power_spikes || []
+
+    const tips = skills.slice(0, 3).map(s => `${s.name}(${s.key})に注意`)
+    while (tips.length < 3) tips.push('無理なトレードを避ける')
+
+    return {
+      summary: `${champ}との対面`,
+      tips,
+      playstyle: opponentData.weakness ? `${opponentData.weakness}を突く` : '慎重にファーム重視でプレイ',
+      danger: skills[0] ? `${skills[0].name}(${skills[0].key})が脅威` : '敵のオールインに注意',
+      power_spike: spikes[0] || 'Lv6が敵のスパイク',
+    }
+  }
+
+  _truncate(str, maxLen) {
+    if (typeof str !== 'string') return ''
+    return str.length > maxLen ? str.substring(0, maxLen) : str
+  }
+
+  // === リセット ===
+  reset() {
+    this.lastItemResult = null
+    this.lastMacroResult = null
+  }
+}
+
+module.exports = { Postprocessor }
