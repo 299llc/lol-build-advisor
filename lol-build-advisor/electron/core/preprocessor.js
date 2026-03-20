@@ -427,10 +427,9 @@ class Preprocessor {
     let counterCount = 0
     const counterCandidateIds = new Set()
 
-    // AP比率60%以上 → MR系アイテム
-    if (gameState.enemy.damageProfile.ap >= 60) {
-      // MR系アイテムをCOUNTER_ITEMSから直接取得できないので、cc用のMRアイテムを流用
-      // 3111=マーキュリーブーツ(MR), 3139=QSS系(MR)
+    // AP比率30%以上 → MR系アイテムを候補に追加
+    if (gameState.enemy.damageProfile.ap >= 30) {
+      // 3111=マーキュリーブーツ(MR), 3139=QSS系(MR), 3156=マウ=モータス(MR)
       for (const id of ['3111', '3139', '3156']) {
         if (!ownedItemIds.has(id)) counterCandidateIds.add(id)
       }
@@ -448,10 +447,19 @@ class Preprocessor {
       }
     }
 
+    // AP<30% → MRアイテムを候補から除外、AD<30% → アーマーアイテムを候補から除外
+    const MR_ITEM_IDS = new Set(['3111', '3139', '3156', '3065', '3190', '3222', '3105'])
+    const ARMOR_ITEM_IDS = new Set(['3075', '3143', '3742', '3047', '3110', '3082'])
+    const apPct = gameState.enemy.damageProfile.ap
+    const adPct = gameState.enemy.damageProfile.ad
+
     for (const id of counterCandidateIds) {
       if (counterCount >= 2) break
       // 既にcoreで追加済みなら除外
       if (candidates.some(c => c.id === id)) continue
+      // ダメージプロファイルに基づくフィルタ
+      if (apPct < 30 && MR_ITEM_IDS.has(id)) continue
+      if (adPct < 30 && ARMOR_ITEM_IDS.has(id)) continue
       const patchItem = getItemById(id)
       if (!patchItem) continue
       const effect = (patchItem.fullDesc || patchItem.description || '').substring(0, 80)
@@ -716,7 +724,7 @@ class Preprocessor {
       }
     }
 
-    // ビルドパス復元（アイテム購入順序）
+    // ビルドパス復元（完成品のみ — コンポーネントは除外してトークン節約）
     const buildPath = []
     let prevItems = new Set()
     for (const snap of gameLog) {
@@ -724,11 +732,13 @@ class Preprocessor {
       for (const item of currentItems) {
         if (!prevItems.has(item)) {
           const patchItem = getItemById(item)
-          buildPath.push({
-            time: snap.timestamp,
-            id: item,
-            name: patchItem?.jaName || item
-          })
+          // 完成品のみ記録（コンポーネント・消耗品を除外）
+          if (patchItem && isCompletedItem(patchItem)) {
+            buildPath.push({
+              time: snap.timestamp,
+              name: patchItem.jaName || item
+            })
+          }
         }
       }
       prevItems = currentItems

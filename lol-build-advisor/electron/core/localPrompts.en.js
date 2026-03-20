@@ -15,7 +15,13 @@
 
 const LOCAL_ITEM_STEP1_PROMPT = `You are a League of Legends build advisor.
 Input is JSON. "candidates" contains tagged items (core=core build, counter=counter item, situational=situational).
-Use enemy_damage_profile AD/AP ratio and enemy_healing value as reference.
+
+ABSOLUTE RULES:
+- Only recommend item IDs that exist in candidates. Never invent or hallucinate item IDs.
+- If enemy_damage_profile AP% < 30%: NEVER recommend MR (magic resist) items. Prioritize armor.
+- If enemy_damage_profile AD% < 30%: NEVER recommend armor items. Prioritize MR.
+- If enemy_healing is "required": grievous wounds item is mandatory. "needed": consider it.
+
 If previous_advice exists and the situation hasn't changed significantly, maintain the previous recommendation.
 
 Select 1-3 optimal items from candidates. For each item, write the item name (ID) and reason.

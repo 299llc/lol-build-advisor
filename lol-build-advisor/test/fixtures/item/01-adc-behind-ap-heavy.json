@@ -14,8 +14,7 @@
     { "id": 3139, "name": "マーキュリアルシミター", "tag": "counter", "desc": "MR+QSS" },
     { "id": 3156, "name": "マウ=モータス", "tag": "counter", "desc": "MRシールド" },
     { "id": 3046, "name": "ファントムダンサー", "tag": "core", "desc": "AS+クリ" },
-    { "id": 3036, "name": "ドミニクリガード", "tag": "situational", "desc": "AR貫通" },
-    { "id": 3075, "name": "ソーンメイル", "tag": "situational", "desc": "アーマー+重傷" }
+    { "id": 3036, "name": "ドミニクリガード", "tag": "situational", "desc": "AR貫通" }
   ],
   "core_build": [
     { "id": 3031, "name": "IE" },

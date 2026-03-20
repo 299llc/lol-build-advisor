@@ -35,11 +35,13 @@ class Postprocessor {
     // 3. recommended の各要素をフィルタ・整形
     const filtered = []
     for (const item of raw.recommended) {
-      // id が candidateIds に含まれない → 除外
-      if (!candidateIds || !candidateIds.includes(item.id)) continue
+      // id を文字列に正規化してから比較（LLMが数値で返すケース対策）
+      const itemId = String(item.id)
+      const normalizedCandidates = candidateIds ? candidateIds.map(String) : null
+      if (!normalizedCandidates || !normalizedCandidates.includes(itemId)) continue
 
       filtered.push({
-        id: item.id,
+        id: itemId,
         reason: (typeof item.reason === 'string' && item.reason.length > 0)
           ? this._toOneSentence(item.reason)
           : '推奨'

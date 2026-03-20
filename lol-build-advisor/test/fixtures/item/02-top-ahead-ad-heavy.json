@@ -13,7 +13,6 @@
   "candidates": [
     { "id": 3143, "name": "ランデュインオーメン", "tag": "counter", "desc": "アーマー+AS低下" },
     { "id": 3742, "name": "デッドマンプレート", "tag": "situational", "desc": "アーマー+MS" },
-    { "id": 3065, "name": "スピリットビサージュ", "tag": "situational", "desc": "MR+回復増" },
     { "id": 3071, "name": "ブラッククリーバー", "tag": "core", "desc": "AD+AR貫通" },
     { "id": 3033, "name": "モータルリマインダー", "tag": "counter", "desc": "重傷" }
   ],
