@@ -1,0 +1,25 @@
+{
+  "me": {
+    "champion": "Yasuo",
+    "role": "MID",
+    "skills": [
+      { "key": "Passive", "name": "鋼の意志/二重の刃", "desc": "シールド生成・クリティカル2倍" },
+      { "key": "Q", "name": "鋼の嵐", "desc": "突き攻撃、3回目で竜巻" },
+      { "key": "W", "name": "風の壁", "desc": "飛翔体を遮断する壁" },
+      { "key": "E", "name": "抜刀", "desc": "敵ユニットを通過してダッシュ" },
+      { "key": "R", "name": "ラストブレス", "desc": "エアボーン中の敵にブリンク+AR貫通付与" }
+    ]
+  },
+  "opponent": {
+    "champion": "Zed",
+    "skills": [
+      { "key": "Passive", "name": "弱者必衰", "desc": "HP50%以下の敵にボーナス魔法ダメージ" },
+      { "key": "Q", "name": "手裏剣", "desc": "手裏剣を直線に投げる" },
+      { "key": "W", "name": "影分身", "desc": "影を設置、入れ替え可能" },
+      { "key": "E", "name": "影手裏剣", "desc": "周囲にダメージ" },
+      { "key": "R", "name": "デスマーク", "desc": "対象に飛びつきマークを付与、数秒後に爆発" }
+    ],
+    "power_spikes": ["lv6", "lv11", "eclipse"],
+    "counter_tags": ["burst", "mobility"]
+  }
+}

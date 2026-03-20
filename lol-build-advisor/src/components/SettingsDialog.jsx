@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Check, Loader2, AlertCircle, Pin, RefreshCw, FolderOpen, Shield, ChevronDown, Download, Play, Zap, Trash2 } from 'lucide-react'
+import { X, Check, Loader2, AlertCircle, Pin, RefreshCw, FolderOpen, ChevronDown, Download, Play, Zap, Trash2, FileText, Scale, Cloud, Monitor } from 'lucide-react'
+import { LegalDialog } from './LegalDialog'
 
 // ダウンロード可能なモデル一覧
 const AVAILABLE_MODELS = [
@@ -203,6 +204,7 @@ export function SettingsDialog({ onClose }) {
   const [onTop, setOnTop] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState(null)
+  const [legalPage, setLegalPage] = useState(null) // 'privacy' | 'disclaimer' | null
 
   // プロバイダー設定 (現在はローカルLLMのみ)
   const [providerType, setProviderType] = useState('ollama')
@@ -215,11 +217,8 @@ export function SettingsDialog({ onClose }) {
   const [pullingModel, setPullingModel] = useState(null) // ダウンロード中のモデルID
   const [pullProgress, setPullProgress] = useState(null)
 
-  // ライセンス
-  const [licenseKey, setLicenseKey] = useState('')
-  const [licenseStatus, setLicenseStatus] = useState(null)
-  const [licenseVerifying, setLicenseVerifying] = useState(false)
-  const [licenseError, setLicenseError] = useState('')
+  // Bedrock接続状態
+  const [bedrockStatus, setBedrockStatus] = useState(null) // 'connected' | 'error' | null
 
   useEffect(() => {
     window.electronAPI?.getAiStatus().then(on => setAiOn(!!on))
@@ -227,28 +226,27 @@ export function SettingsDialog({ onClose }) {
 
     // プロバイダー復元
     window.electronAPI?.getProvider().then(p => {
+      if (p?.type === 'bedrock') {
+        setProviderType('bedrock')
+        setBedrockStatus('connected')
+      } else {
+        setProviderType('ollama')
+      }
       if (p?.baseUrl) setOllamaUrl(p.baseUrl)
       const model = p?.model || (p?.type === 'ollama' ? 'qwen3.5:9b' : '')
       if (model) { setOllamaModel(model); setActiveModel(model) }
-      if (p?.type === 'ollama') {
+      if (p?.type === 'ollama' || !p?.type) {
         setOllamaStatus('connected')
-        // モデル一覧も取得
-        const url = p.baseUrl || 'http://localhost:11434'
+        const url = p?.baseUrl || 'http://localhost:11434'
         window.electronAPI?.ollamaModels(url).then(models => {
           if (models?.length > 0) {
             setOllamaModels(models)
-            // 現在のモデルがリストにない場合はリスト先頭を選択
             if (model && !models.some(m => m.name === model)) {
               setOllamaModel(models[0].name)
             }
           }
         }).catch(() => {})
       }
-    })
-
-    // ライセンス状態
-    window.electronAPI?.getLicenseStatus().then(s => {
-      if (s) setLicenseStatus(s)
     })
 
     // モデルDL進捗
@@ -302,19 +300,13 @@ export function SettingsDialog({ onClose }) {
     } catch {}
   }
 
-  // ライセンス検証
-  const verifyLicense = async () => {
-    if (!licenseKey.trim()) return
-    setLicenseVerifying(true)
-    setLicenseError('')
-    const result = await window.electronAPI?.verifyLicense(licenseKey.trim())
-    setLicenseVerifying(false)
-    if (result?.valid) {
-      const s = await window.electronAPI?.getLicenseStatus()
-      setLicenseStatus(s)
-      setLicenseKey('')
-    } else {
-      setLicenseError(result?.error || '検証に失敗しました')
+  // プロバイダー切り替え
+  const switchProvider = async (type) => {
+    setProviderType(type)
+    if (type === 'bedrock') {
+      setBedrockStatus(null)
+      const result = await window.electronAPI?.setBedrockProvider()
+      setBedrockStatus(result?.success ? 'connected' : 'error')
     }
   }
 
@@ -458,55 +450,39 @@ export function SettingsDialog({ onClose }) {
 
           </div>
 
-          {/* ── ライセンス ── */}
+          {/* ── プロバイダー選択 ── */}
           <div className="space-y-2 p-3 rounded bg-lol-bg border border-lol-gold-dim/30">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-lol-text flex items-center gap-1.5">
-                <Shield size={12} />
-                ライセンス
-              </span>
-              <span className={`text-[11px] px-2 py-0.5 rounded ${licenseStatus?.tier === 'pro' ? 'bg-lol-gold/20 text-lol-gold' : 'bg-lol-surface-light text-lol-text'}`}>
-                {licenseStatus?.tier === 'pro' ? 'Pro' : 'Free'}
-              </span>
+            <span className="text-xs text-lol-text-light">AIプロバイダー</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => switchProvider('ollama')}
+                className={`flex-1 py-2 text-xs rounded border transition-colors flex items-center justify-center gap-1.5 ${
+                  providerType === 'ollama'
+                    ? 'bg-lol-blue/20 text-lol-blue border-lol-blue/40'
+                    : 'bg-lol-surface text-lol-text border-lol-gold-dim/30 hover:border-lol-blue/30'
+                }`}
+              >
+                <Monitor size={12} />
+                ローカル (Free)
+              </button>
+              <button
+                onClick={() => switchProvider('bedrock')}
+                className={`flex-1 py-2 text-xs rounded border transition-colors flex items-center justify-center gap-1.5 ${
+                  providerType === 'bedrock'
+                    ? 'bg-lol-gold/20 text-lol-gold border-lol-gold/40'
+                    : 'bg-lol-surface text-lol-text border-lol-gold-dim/30 hover:border-lol-gold/30'
+                }`}
+              >
+                <Cloud size={12} />
+                クラウド (Pro)
+              </button>
             </div>
-
-            {licenseStatus?.tier === 'pro' ? (
-              <div className="space-y-1">
-                <p className="text-[11px] text-lol-gold">Pro ライセンス有効 - 無制限</p>
-                <button
-                  onClick={async () => {
-                    await window.electronAPI?.clearLicense()
-                    setLicenseStatus({ tier: 'free', remainingGames: 2 })
-                  }}
-                  className="text-[10px] text-lol-text hover:text-lol-red transition-colors"
-                >
-                  ライセンスを解除
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-[11px] text-lol-text">
-                  本日の残り試合: <span className="text-lol-blue font-bold">{licenseStatus?.remainingGames ?? 2}</span> / 2
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={licenseKey}
-                    onChange={e => { setLicenseKey(e.target.value); setLicenseError('') }}
-                    placeholder="ライセンスキー"
-                    className="flex-1 px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-xs text-lol-text-light placeholder:text-lol-text/30 focus:outline-none focus:border-lol-gold/50"
-                  />
-                  <button
-                    onClick={verifyLicense}
-                    disabled={!licenseKey.trim() || licenseVerifying}
-                    className="px-3 py-1.5 text-xs rounded bg-lol-gold/20 text-lol-gold border border-lol-gold/30 hover:bg-lol-gold/30 disabled:opacity-40 transition-colors"
-                  >
-                    {licenseVerifying ? <Loader2 size={12} className="animate-spin" /> : '認証'}
-                  </button>
-                </div>
-                {licenseError && (
-                  <p className="text-[11px] text-lol-red">{licenseError}</p>
-                )}
+            {providerType === 'bedrock' && (
+              <div className="flex items-center gap-2 px-1 pt-1">
+                <div className={`w-2 h-2 rounded-full ${bedrockStatus === 'connected' ? 'bg-lol-accent' : bedrockStatus === 'error' ? 'bg-lol-red' : 'bg-lol-text/30'}`} />
+                <span className="text-[11px] text-lol-text-light">
+                  {bedrockStatus === 'connected' ? 'Bedrock (AWS) 接続済み' : bedrockStatus === 'error' ? 'Bedrock 接続失敗 — .env を確認してください' : '接続確認中...'}
+                </span>
               </div>
             )}
           </div>
@@ -558,17 +534,38 @@ export function SettingsDialog({ onClose }) {
             </button>
           </div>
 
-          {/* バージョン情報 & 免責表記 */}
+          {/* バージョン情報 & 法的情報 */}
           <div className="pt-2 border-t border-lol-gold-dim/20 text-center space-y-2">
             <p className="text-[10px] text-lol-text/50">
               ろるさぽくん v{__APP_VERSION__}
             </p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => setLegalPage('privacy')}
+                className="text-[10px] text-lol-text/40 hover:text-lol-blue transition-colors flex items-center gap-1"
+              >
+                <FileText size={10} />
+                プライバシーポリシー
+              </button>
+              <span className="text-lol-text/20">|</span>
+              <button
+                onClick={() => setLegalPage('disclaimer')}
+                className="text-[10px] text-lol-text/40 hover:text-lol-blue transition-colors flex items-center gap-1"
+              >
+                <Scale size={10} />
+                免責事項
+              </button>
+            </div>
             <p className="text-[9px] text-lol-text/30 leading-relaxed">
               ろるさぽくん isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
             </p>
           </div>
         </div>
       </div>
+
+      {legalPage && (
+        <LegalDialog page={legalPage} onClose={() => setLegalPage(null)} />
+      )}
     </div>
   )
 }

@@ -1,42 +1,42 @@
 /**
  * AWS Bedrock プロバイダー
- * AWS Bedrock 経由で Claude を呼び出す (マネージドキーモデル用)
+ * AWS Bedrock 経由で Claude を呼び出す
  *
- * 必要な環境変数 or コンストラクタ引数:
- *   - region: AWS リージョン (例: 'us-east-1')
- *   - accessKeyId: AWS Access Key ID
- *   - secretAccessKey: AWS Secret Access Key
+ * 認証方式:
+ *   1. APIキー方式 (推奨): BEDROCK_API_KEY + Bearer認証
+ *   2. IAM方式: accessKeyId + secretAccessKey で SigV4 署名
  *
- * Bedrock の Claude モデル ID:
- *   - anthropic.claude-haiku-4-5-20251001-v1:0
- *   - anthropic.claude-sonnet-4-6-20250514-v1:0
- *
- * Note: cache_control (prompt caching) は Bedrock でもサポートされている
+ * cross-region inference profile を使用:
+ *   - us.anthropic.claude-haiku-4-5-20251001-v1:0
  */
-
-// Bedrock は Anthropic Messages API 互換のリクエスト形式をサポート
-// https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
 
 const crypto = require('crypto')
 
-// Anthropic モデル名 → Bedrock モデル ID のマッピング
+// Anthropic モデル名 → Bedrock cross-region inference profile ID のマッピング
 const MODEL_MAP = {
-  'claude-haiku-4-5-20251001': 'anthropic.claude-haiku-4-5-20251001-v1:0',
-  'claude-sonnet-4-6': 'anthropic.claude-sonnet-4-6-20250514-v1:0',
+  'claude-haiku-4-5-20251001': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
 }
 
 class BedrockProvider {
-  constructor({ region, accessKeyId, secretAccessKey }) {
+  /**
+   * @param {object} opts
+   * @param {string} [opts.apiKey] - Bedrock APIキー (ABSK... 形式)
+   * @param {string} [opts.region] - AWS リージョン (APIキー方式では us-east-1 推奨)
+   * @param {string} [opts.accessKeyId] - IAM Access Key ID (APIキーがない場合)
+   * @param {string} [opts.secretAccessKey] - IAM Secret Access Key (APIキーがない場合)
+   */
+  constructor({ apiKey, region, accessKeyId, secretAccessKey }) {
     this.region = region || 'us-east-1'
-    this.accessKeyId = accessKeyId
-    this.secretAccessKey = secretAccessKey
+    this.apiKey = apiKey || null
+    this.accessKeyId = accessKeyId || null
+    this.secretAccessKey = secretAccessKey || null
     this.type = 'bedrock'
   }
 
   async sendMessage({ model, maxTokens, temperature = 0, system, messages, signal }) {
     const bedrockModel = MODEL_MAP[model] || model
     const endpoint = `https://bedrock-runtime.${this.region}.amazonaws.com`
-    const path = `/model/${encodeURIComponent(bedrockModel)}/invoke`
+    const reqPath = `/model/${encodeURIComponent(bedrockModel)}/invoke`
 
     const body = JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
@@ -46,9 +46,11 @@ class BedrockProvider {
       messages
     })
 
-    const headers = await this._signRequest('POST', path, body, endpoint)
+    const headers = this.apiKey
+      ? this._apiKeyHeaders()
+      : await this._signRequest('POST', reqPath, body, endpoint)
 
-    const res = await fetch(`${endpoint}${path}`, {
+    const res = await fetch(`${endpoint}${reqPath}`, {
       method: 'POST',
       headers: {
         ...headers,
@@ -72,7 +74,8 @@ class BedrockProvider {
         cache_read: data.usage.cache_read_input_tokens || 0,
         cache_creation: data.usage.cache_creation_input_tokens || 0
       } : null,
-      stopReason: data.stop_reason
+      stopReason: data.stop_reason,
+      _meta: { model: bedrockModel }
     }
   }
 
@@ -80,27 +83,38 @@ class BedrockProvider {
     try {
       const bedrockModel = MODEL_MAP['claude-haiku-4-5-20251001']
       const endpoint = `https://bedrock-runtime.${this.region}.amazonaws.com`
-      const path = `/model/${encodeURIComponent(bedrockModel)}/invoke`
+      const reqPath = `/model/${encodeURIComponent(bedrockModel)}/invoke`
       const body = JSON.stringify({
         anthropic_version: 'bedrock-2023-05-31',
         max_tokens: 10,
         messages: [{ role: 'user', content: 'hi' }]
       })
 
-      const headers = await this._signRequest('POST', path, body, endpoint)
-      const res = await fetch(`${endpoint}${path}`, {
+      const headers = this.apiKey
+        ? this._apiKeyHeaders()
+        : await this._signRequest('POST', reqPath, body, endpoint)
+
+      const res = await fetch(`${endpoint}${reqPath}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body
       })
-      return res.ok
+      // 200 = 成功, 429 = レート制限（認証は成功）
+      return res.ok || res.status === 429
     } catch {
       return false
     }
   }
 
-  // AWS Signature V4 署名
-  async _signRequest(method, path, body, endpoint) {
+  // APIキー認証: Bearer トークン
+  _apiKeyHeaders() {
+    return {
+      'Authorization': `Bearer ${this.apiKey}`,
+    }
+  }
+
+  // AWS Signature V4 署名 (IAM認証用)
+  async _signRequest(method, reqPath, body, endpoint) {
     const host = new URL(endpoint).host
     const now = new Date()
     const dateStamp = now.toISOString().replace(/[-:]/g, '').substring(0, 8)
@@ -113,7 +127,7 @@ class BedrockProvider {
     const payloadHash = crypto.createHash('sha256').update(body || '').digest('hex')
 
     const canonicalRequest = [
-      method, path, '', canonicalHeaders, signedHeaders, payloadHash
+      method, reqPath, '', canonicalHeaders, signedHeaders, payloadHash
     ].join('\n')
 
     const stringToSign = [

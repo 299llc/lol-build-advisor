@@ -1,0 +1,26 @@
+{
+  "me": {
+    "champion": "Jinx",
+    "role": "ADC",
+    "level": 11,
+    "items": [3031, 3085],
+    "gold": 1200,
+    "status": "behind"
+  },
+  "enemy_damage_profile": { "ad_pct": 30, "ap_pct": 70 },
+  "enemy_healing": "none",
+  "situation": "behind",
+  "candidates": [
+    { "id": 3139, "name": "マーキュリアルシミター", "tag": "counter", "desc": "MR+QSS" },
+    { "id": 3156, "name": "マウ=モータス", "tag": "counter", "desc": "MRシールド" },
+    { "id": 3046, "name": "ファントムダンサー", "tag": "core", "desc": "AS+クリ" },
+    { "id": 3036, "name": "ドミニクリガード", "tag": "situational", "desc": "AR貫通" },
+    { "id": 3075, "name": "ソーンメイル", "tag": "situational", "desc": "アーマー+重傷" }
+  ],
+  "core_build": [
+    { "id": 3031, "name": "IE" },
+    { "id": 3085, "name": "ハリケーン" },
+    { "id": 3046, "name": "PD" }
+  ],
+  "previous_advice": null
+}

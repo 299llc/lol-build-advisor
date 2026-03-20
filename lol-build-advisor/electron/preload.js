@@ -159,20 +159,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ゲームログ
   openGameLogFolder: () => ipcRenderer.invoke('gamelog:openFolder'),
 
-  // ライセンス管理
-  getLicenseStatus: () => ipcRenderer.invoke('license:status'),
-  verifyLicense: (key) => ipcRenderer.invoke('license:verify', key),
-  clearLicense: () => ipcRenderer.invoke('license:clear'),
-
-  // プロバイダー切替 (Ollama / Anthropic)
+  // プロバイダー切替 (Ollama / Anthropic / Bedrock)
   setOllamaProvider: (opts) => ipcRenderer.invoke('provider:set-ollama', opts),
   setAnthropicProvider: (key) => ipcRenderer.invoke('provider:set-anthropic', key),
+  setBedrockProvider: () => ipcRenderer.invoke('provider:set-bedrock'),
   getProvider: () => ipcRenderer.invoke('provider:get'),
   ollamaModels: (baseUrl) => ipcRenderer.invoke('ollama:models', baseUrl),
   ollamaValidate: (opts) => ipcRenderer.invoke('ollama:validate', opts),
 
-  // 広告
-  getAd: () => ipcRenderer.invoke('ad:get'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
   // Ollama 自動セットアップ

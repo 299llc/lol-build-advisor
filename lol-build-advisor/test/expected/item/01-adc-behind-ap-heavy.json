@@ -1,0 +1,5 @@
+{
+  "max_items": 3,
+  "must_not_include": [3075],
+  "valid_ids": [3139, 3156, 3046, 3036, 3075]
+}

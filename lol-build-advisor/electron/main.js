@@ -4,8 +4,8 @@ const fs = require('fs')
 const { LiveClientPoller } = require('./api/liveClient')
 const { AiClient } = require('./api/aiClient')
 const { OllamaProvider } = require('./api/providers/ollamaProvider')
+const { BedrockProvider } = require('./api/providers/bedrockProvider')
 const { OllamaSetup } = require('./api/ollamaSetup')
-const { LicenseManager } = require('./api/licenseManager')
 const { ContextBuilder, extractEnName } = require('./api/contextBuilder')
 const { DiffDetector } = require('./api/diffDetector')
 const { setCacheDir, initPatchData, getVersion, getChampionById, getItemById, getSpells, loadSpellsForMatch, refreshCache, formatItemSummary } = require('./api/patchData')
@@ -18,9 +18,32 @@ const { buildMatchChampionKnowledge } = require('./core/knowledgeDb')
 const { MACRO_INTERVAL_MS, MACRO_DEBOUNCE_MS, COUNTER_ITEMS, ITEM_COMPLETE_GOLD, ITEM_BOOT_GOLD, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS, isCompletedItem, classifyObjectiveEvents } = require('./core/config')
 const { SessionRecorder } = require('./core/sessionRecorder')
 const { GameLogger } = require('./core/gameLogger')
-const { AdManager } = require('./api/adManager')
 const { Preprocessor } = require('./core/preprocessor')
 const { Postprocessor } = require('./core/postprocessor')
+
+// ── .env 読み込み ────────────────────────────────
+function loadEnv() {
+  try {
+    const envPath = path.join(__dirname, '..', '.env')
+    const content = fs.readFileSync(envPath, 'utf-8')
+    const env = {}
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const eqIdx = trimmed.indexOf('=')
+      if (eqIdx < 0) continue
+      const key = trimmed.substring(0, eqIdx).trim()
+      let value = trimmed.substring(eqIdx + 1).trim()
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+      }
+      env[key] = value
+    }
+    return env
+  } catch {
+    return {}
+  }
+}
 
 // ── ゲームロガー（console.log フック）──────────────
 const gameLogger = new GameLogger(app.getPath('userData'))
@@ -91,8 +114,6 @@ const state = {
 
   // ルールエンジン
   ruleEngine: null,
-  // ライセンス
-  licenseManager: null,
 
   // 観戦
   spectatorSelectedName: null,
@@ -361,9 +382,26 @@ function setupIPC() {
     return { success: true }
   })
 
+  ipcMain.handle('provider:set-bedrock', async () => {
+    const env = loadEnv()
+    const region = env.AWS_REGION || 'us-east-1'
+    const apiKey = env.BEDROCK_API_KEY
+    const accessKeyId = env.AWS_ACCESS_KEY_ID
+    const secretAccessKey = env.AWS_SECRET_ACCESS_KEY
+    if (!apiKey && (!accessKeyId || !secretAccessKey)) {
+      return { success: false, error: 'AWS認証情報が .env に見つかりません' }
+    }
+    const provider = new BedrockProvider({ apiKey, region, accessKeyId, secretAccessKey })
+    const ok = await provider.validate()
+    if (!ok) return { success: false, error: 'Bedrock 接続に失敗しました' }
+    state.aiClient = new AiClient(provider)
+    saveSetting('provider', { type: 'bedrock', region })
+    return { success: true }
+  })
+
   ipcMain.handle('provider:get', () => {
     const settings = loadSettings()
-    return settings.provider || { type: 'anthropic' }
+    return settings.provider || { type: 'ollama' }
   })
 
   ipcMain.handle('ollama:models', async (_, baseUrl) => {
@@ -438,29 +476,6 @@ function setupIPC() {
     await setup._startService()
     const ready = await setup._waitForReady(15000)
     return { success: ready }
-  })
-
-  // ── ライセンス管理 ──
-  ipcMain.handle('license:status', () => {
-    return state.licenseManager?.getStatus() || { tier: 'free', remainingGames: 0 }
-  })
-
-  ipcMain.handle('license:verify', async (_, key) => {
-    if (!state.licenseManager) return { valid: false, error: 'LicenseManager not initialized' }
-    return state.licenseManager.verifyLicense(key)
-  })
-
-  ipcMain.handle('license:clear', () => {
-    state.licenseManager?.clearLicense()
-    return { tier: 'free' }
-  })
-
-  // ── 広告 ──
-  const adManager = new AdManager()
-  ipcMain.handle('ad:get', async () => {
-    const status = state.licenseManager?.getStatus()
-    if (status?.tier === 'pro') return null
-    return adManager.pickAd()
   })
 
   ipcMain.handle('polling:start', () => startPolling())
@@ -1620,10 +1635,6 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     createWindow()
     setupIPC()
-
-    // ライセンスマネージャー初期化
-    // TODO: Gumroad プロダクトID を設定する (商品作成後に変更)
-    state.licenseManager = new LicenseManager(app.getPath('userData'), 'GUMROAD_PRODUCT_ID')
 
     // プロバイダー復元 (Ollama or Anthropic)
     const savedProvider = loadSettings().provider

@@ -9,7 +9,10 @@
     "build": "vite build",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && npx -y nodemon --watch electron -e js --exec electron .\"",
     "electron:build": "vite build && electron-builder",
-    "electron:build:store": "vite build && electron-builder --win appx"
+    "electron:build:store": "vite build && electron-builder --win appx",
+    "test:ai": "node test/harness/runner.js",
+    "test:ai:bedrock": "node test/harness/runner.js --provider bedrock",
+    "test:ai:verbose": "node test/harness/runner.js --verbose"
   },
   "dependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",

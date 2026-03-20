@@ -1,0 +1,30 @@
+{
+  "me": {
+    "champion": "Ahri",
+    "role": "MID",
+    "level": 16,
+    "kda": { "kills": 5, "deaths": 4, "assists": 8 },
+    "cs": 185,
+    "items": [4005, 3157, 3020, 3089, 3135]
+  },
+  "game_duration": 1800,
+  "game_phase_final": "late",
+  "situation_final": "even",
+  "cs_per_phase": { "early": 6.5, "mid": 7.2, "late": 5.8 },
+  "kda_per_phase": {
+    "early": { "kills": 2, "deaths": 2, "assists": 1 },
+    "mid": { "kills": 2, "deaths": 1, "assists": 4 },
+    "late": { "kills": 1, "deaths": 1, "assists": 3 }
+  },
+  "build_path": [
+    { "item": "ドランリング", "time": 0 },
+    { "item": "ルーデンテンペスト", "time": 660 },
+    { "item": "ソーサラーシューズ", "time": 780 },
+    { "item": "ゾーニャの砂時計", "time": 1080 },
+    { "item": "ラバドンデスキャップ", "time": 1440 }
+  ],
+  "core_match_rate": 80,
+  "objective_participation": 4,
+  "kill_diff_final": 2,
+  "snapshot_count": 15
+}

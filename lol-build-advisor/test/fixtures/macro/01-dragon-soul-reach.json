@@ -1,0 +1,18 @@
+{
+  "me": { "champion": "Jinx", "role": "ADC", "level": 14 },
+  "game_phase": "mid",
+  "situation": "even",
+  "kill_diff": 1,
+  "objectives": {
+    "dragon": { "ally_stacks": 3, "enemy_stacks": 1, "status": "alive", "spawn_timer": 30 }
+  },
+  "lane_state": "mid_pushed",
+  "ally_composition": "teamfight",
+  "enemy_threats": [],
+  "action_candidates": [
+    { "action": "dragon_secure", "reason": "ソウルリーチ、確保優先", "priority": 1 },
+    { "action": "push_side_wave", "reason": "サイドウェーブ回収", "priority": 2 },
+    { "action": "group_mid", "reason": "集団戦準備", "priority": 3 }
+  ],
+  "previous_advice": null
+}

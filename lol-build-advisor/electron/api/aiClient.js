@@ -17,7 +17,6 @@ const { buildKnowledgeContext } = require('../core/knowledgeDb')
 const { AnthropicProvider } = require('./providers/anthropicProvider')
 
 const MODEL_HAIKU = 'claude-haiku-4-5-20251001'
-const MODEL_SONNET = 'claude-sonnet-4-6'
 
 class AiClient {
   /**
@@ -43,6 +42,10 @@ class AiClient {
     this.rank = null  // プレイヤーのランクティア（ランク別アドバイス用）
     // 試合開始時に生成する10体のチャンプ教科書（試合中キャッシュ）
     this.championKnowledge = null
+    // 前回正常出力の保持（エラー時フォールバック用）
+    this.lastMatchupTip = null
+    this.lastMacroAdvice = null
+    this.lastCoaching = null
   }
 
   setCoreBuild(coreBuild) { this.coreBuild = coreBuild }
@@ -70,6 +73,9 @@ class AiClient {
     // rank は試合間で維持（clearMatchでリセットしない）
     this.championKnowledge = null
     this._step1Cache = {}  // Step1キャッシュクリア
+    this.lastMatchupTip = null
+    this.lastMacroAdvice = null
+    this.lastCoaching = null
   }
 
   // 共通API呼び出し (プロバイダー経由)
@@ -297,21 +303,35 @@ class AiClient {
       : JSON.stringify(structuredInput, null, 2)
     const isLocal = this.isLocalLLM()
 
+    let result
     if (isLocal) {
-      return this._twoStepLocal({
+      result = await this._twoStepLocal({
         step1System: LOCAL_MATCHUP_STEP1_PROMPT, step2System: LOCAL_MATCHUP_STEP2_PROMPT,
         messages: [{ role: 'user', content: userContent }],
         step1MaxTokens: 600, step2MaxTokens: 400, logPrefix: 'matchup'
       })
+    } else {
+      const system = [{ type: 'text', text: MATCHUP_PROMPT, cache_control: { type: 'ephemeral' } }]
+      if (this.championKnowledge) {
+        system.push({ type: 'text', text: this.championKnowledge, cache_control: { type: 'ephemeral' } })
+      }
+      result = await this._callApi({
+        model: MODEL_HAIKU, maxTokens: 700, temperature: 0,
+        system,
+        messages: [{ role: 'user', content: userContent }],
+        timeoutMs: 20000, logType: 'matchup'
+      })
     }
 
-    // 設計書9.6: 自由記述（マッチアップ）は高品質モデル
-    return this._callApi({
-      model: MODEL_SONNET, maxTokens: 700, temperature: 0,
-      system: [{ type: 'text', text: MATCHUP_PROMPT, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userContent }],
-      timeoutMs: 20000, logType: 'matchup'
-    })
+    if (result) {
+      this.lastMatchupTip = result
+      return result
+    }
+    // API失敗時: 前回の正常出力にエラーフラグを付与して返す
+    if (this.lastMatchupTip) {
+      return { error: 'うまく取得できませんでした', ...this.lastMatchupTip }
+    }
+    return null
   }
 
   async getMacroAdvice(staticContext, structuredInput) {
@@ -330,35 +350,42 @@ class AiClient {
     }
     const isLocal = this.isLocalLLM()
 
+    let result
     if (isLocal) {
-      // ステートレス: 毎回1メッセージで送信（セッション撤去済み）
-      return this._twoStepLocal({
+      result = await this._twoStepLocal({
         step1System: LOCAL_MACRO_STEP1_PROMPT,
         step2System: LOCAL_MACRO_STEP2_PROMPT,
         messages: [{ role: 'user', content: dynamicContent }],
         step1MaxTokens: 500, step2MaxTokens: 300,
         logPrefix: 'macro', timeoutMs: 60000
       })
-    }
-
-    // Claude API パス
-    const messages = []
-    if (staticContext) {
-      messages.push(
-        { role: 'user', content: [{ type: 'text', text: staticContext, cache_control: { type: 'ephemeral' } }] },
-        { role: 'assistant', content: '了解。リアルタイムの試合状況を送ってください。' },
-        { role: 'user', content: dynamicContent }
-      )
     } else {
-      messages.push({ role: 'user', content: dynamicContent })
+      const messages = []
+      if (staticContext) {
+        messages.push(
+          { role: 'user', content: [{ type: 'text', text: staticContext, cache_control: { type: 'ephemeral' } }] },
+          { role: 'assistant', content: '了解。リアルタイムの試合状況を送ってください。' },
+          { role: 'user', content: dynamicContent }
+        )
+      } else {
+        messages.push({ role: 'user', content: dynamicContent })
+      }
+      result = await this._callApi({
+        model: MODEL_HAIKU, maxTokens: 500, temperature: 0,
+        system: [{ type: 'text', text: MACRO_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages,
+        timeoutMs: 20000, logType: 'macro'
+      })
     }
 
-    return this._callApi({
-      model: MODEL_HAIKU, maxTokens: 500, temperature: 0,
-      system: [{ type: 'text', text: MACRO_PROMPT, cache_control: { type: 'ephemeral' } }],
-      messages,
-      timeoutMs: 20000, logType: 'macro'
-    })
+    if (result) {
+      this.lastMacroAdvice = result
+      return result
+    }
+    if (this.lastMacroAdvice) {
+      return { error: 'うまく取得できませんでした', ...this.lastMacroAdvice }
+    }
+    return null
   }
 
   // セッション関連メソッド撤去済み（Ollama KVキャッシュ不在のため）
@@ -370,24 +397,37 @@ class AiClient {
       : JSON.stringify(structuredInput, null, 2)
     const isLocal = this.isLocalLLM()
 
+    let result
     if (isLocal) {
-      return this._twoStepLocal({
+      result = await this._twoStepLocal({
         step1System: LOCAL_COACHING_STEP1_PROMPT, step2System: LOCAL_COACHING_STEP2_PROMPT,
         messages: [{ role: 'user', content: userContent }],
         step1MaxTokens: 1500, step2MaxTokens: 800, logPrefix: 'coaching', timeoutMs: 120000
       })
+    } else {
+      const system = [{ type: 'text', text: COACHING_PROMPT, cache_control: { type: 'ephemeral' } }]
+      if (this.championKnowledge) {
+        system.push({ type: 'text', text: this.championKnowledge, cache_control: { type: 'ephemeral' } })
+      }
+      result = await this._callApi({
+        model: MODEL_HAIKU,
+        maxTokens: 4000,
+        temperature: 0.3,
+        system,
+        messages: [{ role: 'user', content: userContent }],
+        timeoutMs: 60000,
+        logType: 'coaching'
+      })
     }
 
-    // 設計書9.6: 自由記述（コーチング）は高品質モデル
-    return this._callApi({
-      model: MODEL_SONNET,
-      maxTokens: 4000,
-      temperature: 0.3,
-      system: COACHING_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-      timeoutMs: 60000,
-      logType: 'coaching'
-    })
+    if (result) {
+      this.lastCoaching = result
+      return result
+    }
+    if (this.lastCoaching) {
+      return { error: 'うまく取得できませんでした', ...this.lastCoaching }
+    }
+    return null
   }
 
   _pushLog(entry) {
