@@ -1,0 +1,46 @@
+{
+  "game_time": 960,
+  "me": { "champion": "ナサス", "role": "TOP", "level": 9, "kda": [0, 4, 1], "cs": 85, "gold": 300, "status": "behind", "isDead": false, "hasTP": true, "ultReady": true },
+  "game_phase": "mid",
+  "situation": "behind",
+  "kill_diff": -6,
+  "gold_diff": -4000,
+  "allies": [
+    { "champion": "リーシン", "role": "JG", "level": 9, "status": "normal" },
+    { "champion": "アーリ", "role": "MID", "level": 10, "status": "normal" },
+    { "champion": "ジン", "role": "ADC", "level": 9, "status": "behind" },
+    { "champion": "ラカン", "role": "SUP", "level": 8, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 11, "status": "fed", "hasTP": true },
+    { "champion": "エリス", "role": "JG", "level": 10, "status": "fed" },
+    { "champion": "ゼド", "role": "MID", "level": 11, "status": "fed" },
+    { "champion": "ジンクス", "role": "ADC", "level": 10, "status": "normal" },
+    { "champion": "ノーチラス", "role": "SUP", "level": 8, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 0, "enemyCount": 2, "nextSpawnSec": 60, "soulPoint": false, "available": false, "type": "海" },
+    "baron": { "available": false, "spawnSec": 240 },
+    "herald": { "available": true },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": ["outer"], "mid": [], "bot": ["outer"] },
+    "enemy_lost": { "top": [], "mid": [], "bot": [] }
+  },
+  "lane_state": { "top": "enemy_pushing", "mid": "unknown", "bot": "enemy_pushing" },
+  "ally_composition": "scale",
+  "ally_has_engager": false,
+  "ally_has_frontline": false,
+  "enemy_composition": "engage",
+  "enemy_threats": [
+    { "champion": "ダリウス", "reason": "fed_ad_carry", "level": 11, "items": 2 },
+    { "champion": "ゼド", "reason": "fed_ad_carry", "level": 11, "items": 2 }
+  ],
+  "action_candidates": [
+    { "action": "farm", "reason": "劣勢時はファームで追いつく", "priority": 4 },
+    { "action": "ward", "reason": "視界を確保して安全にプレイ", "priority": 4 }
+  ],
+  "previous_advice": null
+}

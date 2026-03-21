@@ -1,0 +1,4 @@
+{
+  "valid_actions": ["dragon_secure", "push_tower"],
+  "preferred_action": "dragon_secure"
+}

@@ -1,0 +1,48 @@
+{
+  "_scenario": "味方BOTインヒビターが破壊され、スーパーミニオン対処中。しかしバロンが取得可能",
+  "game_time": 1900,
+  "me": { "champion": "アーリ", "role": "MID", "level": 17, "kda": [7, 5, 6], "cs": 245, "gold": 1100, "status": "normal", "isDead": false, "hasTP": false, "ultReady": true },
+  "game_phase": "late",
+  "situation": "behind",
+  "kill_diff": -3,
+  "gold_diff": -2500,
+  "allies": [
+    { "champion": "マルファイト", "role": "TOP", "level": 16, "status": "normal", "hasTP": true },
+    { "champion": "リーシン", "role": "JG", "level": 16, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 16, "status": "normal" },
+    { "champion": "レオナ", "role": "SUP", "level": 14, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ヨリック", "role": "TOP", "level": 17, "status": "fed", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 17, "status": "normal" },
+    { "champion": "ゼド", "role": "MID", "level": 17, "status": "fed" },
+    { "champion": "ケイトリン", "role": "ADC", "level": 16, "status": "normal" },
+    { "champion": "モルガナ", "role": "SUP", "level": 14, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 1, "enemyCount": 3, "nextSpawnSec": 90, "soulPoint": true, "available": false, "type": "炎" },
+    "baron": { "available": true, "spawnSec": null },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": ["outer"], "mid": ["outer"], "bot": ["outer", "inner", "inhib"] },
+    "enemy_lost": { "top": ["outer"], "mid": ["outer"], "bot": [] }
+  },
+  "lane_state": { "top": "unknown", "mid": "enemy_pushing", "bot": "enemy_pushing" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "split",
+  "enemy_threats": [
+    { "champion": "ヨリック", "reason": "fed_ad_carry", "level": 17, "items": 4 },
+    { "champion": "ゼド", "reason": "fed_ad_carry", "level": 17, "items": 4 }
+  ],
+  "action_candidates": [
+    { "action": "baron_secure", "reason": "バロンが取得可能", "priority": 1 },
+    { "action": "farm", "reason": "劣勢時はファームで追いつく", "priority": 4 },
+    { "action": "ward", "reason": "視界を確保して安全にプレイ", "priority": 4 }
+  ],
+  "previous_advice": null
+}

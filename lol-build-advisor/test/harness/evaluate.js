@@ -147,6 +147,24 @@ function evaluateMacro(actual, expected) {
     }
   }
 
+  // preferred_action チェック（推奨だが不一致でもfailにしない、詳細に記録）
+  if (expected.preferred_action && actual.action) {
+    if (actual.action !== expected.preferred_action) {
+      details.push(`⚠ preferred_action "${expected.preferred_action}" ではなく "${actual.action}" を選択`)
+    }
+  }
+
+  // キーワードチェック（title + desc + warning に含まれるか）
+  if (expected.must_mention) {
+    const allText = `${actual.title || ''} ${actual.desc || ''} ${actual.warning || ''}`.toLowerCase()
+    for (const keyword of expected.must_mention) {
+      if (!allText.includes(keyword.toLowerCase())) {
+        details.push(`キーワード「${keyword}」が言及されていない`)
+        pass = false
+      }
+    }
+  }
+
   if (pass) details.push('OK')
   return { pass, details }
 }

@@ -1,0 +1,44 @@
+{
+  "game_time": 1400,
+  "me": { "champion": "リーシン", "role": "JG", "level": 13, "kda": [5, 2, 8], "cs": 150, "gold": 600, "status": "fed", "isDead": false, "hasTP": false, "ultReady": true },
+  "game_phase": "mid",
+  "situation": "even",
+  "kill_diff": 2,
+  "gold_diff": 1000,
+  "allies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 13, "status": "normal", "hasTP": true },
+    { "champion": "アーリ", "role": "MID", "level": 13, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 12, "status": "normal" },
+    { "champion": "レオナ", "role": "SUP", "level": 10, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ガレン", "role": "TOP", "level": 13, "status": "normal", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 12, "status": "normal", "isDead": true, "respawnIn": 25 },
+    { "champion": "ゼド", "role": "MID", "level": 13, "status": "normal", "isDead": true, "respawnIn": 20 },
+    { "champion": "ケイトリン", "role": "ADC", "level": 12, "status": "normal" },
+    { "champion": "ナミ", "role": "SUP", "level": 10, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 1, "enemyCount": 1, "nextSpawnSec": null, "soulPoint": false, "available": true, "type": "炎" },
+    "baron": { "available": false, "spawnSec": 200 },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": [], "mid": [], "bot": [] },
+    "enemy_lost": { "top": ["outer"], "mid": [], "bot": [] }
+  },
+  "lane_state": { "top": "ally_pushing", "mid": "unknown", "bot": "unknown" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "engage",
+  "enemy_threats": [],
+  "action_candidates": [
+    { "action": "dragon_secure", "reason": "ドラゴンが取得可能", "priority": 1 },
+    { "action": "push_tower", "reason": "敵2人デス中 - タワーを押す", "priority": 3 },
+    { "action": "invade", "reason": "敵2人デス中 - インベイド", "priority": 3 }
+  ],
+  "previous_advice": null
+}

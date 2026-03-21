@@ -1,0 +1,5 @@
+{
+  "valid_actions": ["push_tower"],
+  "preferred_action": "push_tower",
+  "must_mention": ["バロン"]
+}

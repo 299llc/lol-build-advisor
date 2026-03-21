@@ -1,0 +1,45 @@
+{
+  "game_time": 1650,
+  "me": { "champion": "マルファイト", "role": "TOP", "level": 15, "kda": [2, 3, 10], "cs": 175, "gold": 800, "status": "normal", "isDead": false, "hasTP": true, "ultReady": true },
+  "game_phase": "late",
+  "situation": "ahead",
+  "kill_diff": 5,
+  "gold_diff": 3500,
+  "allies": [
+    { "champion": "カジックス", "role": "JG", "level": 15, "status": "fed" },
+    { "champion": "アーリ", "role": "MID", "level": 15, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 15, "status": "fed" },
+    { "champion": "ルル", "role": "SUP", "level": 13, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ガレン", "role": "TOP", "level": 14, "status": "normal", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 14, "status": "behind" },
+    { "champion": "ラックス", "role": "MID", "level": 14, "status": "normal" },
+    { "champion": "ケイトリン", "role": "ADC", "level": 14, "status": "normal" },
+    { "champion": "モルガナ", "role": "SUP", "level": 12, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 2, "enemyCount": 1, "nextSpawnSec": 120, "soulPoint": false, "available": false, "type": "風" },
+    "baron": { "available": false, "spawnSec": null },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": true, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": ["outer"], "mid": [], "bot": [] },
+    "enemy_lost": { "top": ["outer", "inner"], "mid": ["outer"], "bot": ["outer", "inner"] }
+  },
+  "lane_state": { "top": "ally_pushing", "mid": "ally_pushing", "bot": "ally_pushing" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "poke",
+  "enemy_threats": [],
+  "ally_fed": ["カジックス", "ジンクス"],
+  "action_candidates": [
+    { "action": "push_tower", "reason": "バロンバフ中 - タワーを押す", "priority": 1 },
+    { "action": "split_push", "reason": "サイドレーン圧力をかける", "priority": 3 },
+    { "action": "ward", "reason": "視界確保で情報有利を作る", "priority": 4 }
+  ],
+  "previous_advice": null
+}

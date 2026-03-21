@@ -1,0 +1,45 @@
+{
+  "_scenario": "敵がドラゴンに集結。味方TOP側にヘラルドがある。トレードすべきか",
+  "game_time": 960,
+  "me": { "champion": "フィオラ", "role": "TOP", "level": 10, "kda": [3, 1, 0], "cs": 120, "gold": 400, "status": "fed", "isDead": false, "hasTP": true, "ultReady": true },
+  "game_phase": "mid",
+  "situation": "even",
+  "kill_diff": 0,
+  "gold_diff": 500,
+  "allies": [
+    { "champion": "リーシン", "role": "JG", "level": 9, "status": "normal" },
+    { "champion": "アーリ", "role": "MID", "level": 10, "status": "normal" },
+    { "champion": "ジン", "role": "ADC", "level": 9, "status": "normal" },
+    { "champion": "ナミ", "role": "SUP", "level": 8, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "マルファイト", "role": "TOP", "level": 9, "status": "normal", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 10, "status": "normal" },
+    { "champion": "シンドラ", "role": "MID", "level": 10, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 9, "status": "normal" },
+    { "champion": "レオナ", "role": "SUP", "level": 8, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 1, "enemyCount": 1, "nextSpawnSec": null, "soulPoint": false, "available": true, "type": "風" },
+    "baron": { "available": false, "spawnSec": null },
+    "herald": { "available": true },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": [], "mid": [], "bot": [] },
+    "enemy_lost": { "top": [], "mid": [], "bot": [] }
+  },
+  "lane_state": { "top": "ally_pushing", "mid": "unknown", "bot": "enemy_pushing" },
+  "ally_composition": "split",
+  "ally_has_engager": false,
+  "ally_has_frontline": false,
+  "enemy_composition": "engage",
+  "enemy_threats": [],
+  "action_candidates": [
+    { "action": "dragon_secure", "reason": "ドラゴンが取得可能", "priority": 1 },
+    { "action": "push_tower", "reason": "TOPタワーを押す", "priority": 3 },
+    { "action": "farm", "reason": "CSを稼いでアイテム差をつける", "priority": 4 }
+  ],
+  "previous_advice": null
+}

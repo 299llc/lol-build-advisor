@@ -1,0 +1,49 @@
+{
+  "_scenario": "エルダードラゴンとバロン両方取得可能。どちらを優先すべきか",
+  "game_time": 2100,
+  "me": { "champion": "マルファイト", "role": "TOP", "level": 18, "kda": [3, 5, 12], "cs": 200, "gold": 600, "status": "normal", "isDead": false, "hasTP": true, "ultReady": true },
+  "game_phase": "late",
+  "situation": "behind",
+  "kill_diff": -4,
+  "gold_diff": -3000,
+  "allies": [
+    { "champion": "リーシン", "role": "JG", "level": 17, "status": "normal" },
+    { "champion": "アーリ", "role": "MID", "level": 18, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 17, "status": "fed" },
+    { "champion": "レオナ", "role": "SUP", "level": 15, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 18, "status": "fed", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 18, "status": "normal" },
+    { "champion": "ゼド", "role": "MID", "level": 18, "status": "fed" },
+    { "champion": "ケイトリン", "role": "ADC", "level": 17, "status": "normal" },
+    { "champion": "ナミ", "role": "SUP", "level": 15, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 4, "enemyCount": 2, "nextSpawnSec": null, "soulPoint": true, "available": true, "type": "エルダー" },
+    "baron": { "available": true, "spawnSec": null },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": ["outer", "inner"], "mid": ["outer"], "bot": ["outer", "inner"] },
+    "enemy_lost": { "top": ["outer", "inner"], "mid": ["outer", "inner"], "bot": ["outer"] }
+  },
+  "lane_state": { "top": "enemy_pushing", "mid": "unknown", "bot": "enemy_pushing" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "engage",
+  "enemy_threats": [
+    { "champion": "ダリウス", "reason": "fed_ad_carry", "level": 18, "items": 5 },
+    { "champion": "ゼド", "reason": "fed_ad_carry", "level": 18, "items": 5 }
+  ],
+  "ally_fed": ["ジンクス"],
+  "action_candidates": [
+    { "action": "dragon_secure", "reason": "エルダードラゴンが取得可能", "priority": 1 },
+    { "action": "baron_secure", "reason": "バロンが取得可能", "priority": 1 },
+    { "action": "ward", "reason": "視界を確保して安全にプレイ", "priority": 4 }
+  ],
+  "previous_advice": null
+}

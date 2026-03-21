@@ -1,3 +1,5 @@
 {
-  "valid_actions": ["dragon_secure", "push_side_wave", "group_mid"]
+  "valid_actions": ["dragon_prep", "ward"],
+  "preferred_action": "dragon_prep",
+  "must_mention": ["ドラゴン"]
 }

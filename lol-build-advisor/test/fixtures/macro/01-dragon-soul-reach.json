@@ -1,18 +1,44 @@
 {
-  "me": { "champion": "Jinx", "role": "ADC", "level": 14 },
+  "game_time": 1320,
+  "me": { "champion": "ジンクス", "role": "ADC", "level": 14, "kda": [6, 2, 5], "cs": 185, "gold": 500, "status": "fed", "isDead": false, "hasTP": false, "ultReady": true },
   "game_phase": "mid",
   "situation": "even",
   "kill_diff": 1,
+  "gold_diff": 1500,
+  "allies": [
+    { "champion": "マルファイト", "role": "TOP", "level": 13, "status": "normal", "hasTP": true },
+    { "champion": "リーシン", "role": "JG", "level": 13, "status": "normal" },
+    { "champion": "アーリ", "role": "MID", "level": 14, "status": "normal" },
+    { "champion": "レオナ", "role": "SUP", "level": 11, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 13, "status": "normal", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 13, "status": "normal" },
+    { "champion": "シンドラ", "role": "MID", "level": 14, "status": "normal" },
+    { "champion": "ケイトリン", "role": "ADC", "level": 13, "status": "normal" },
+    { "champion": "ナミ", "role": "SUP", "level": 11, "status": "normal" }
+  ],
   "objectives": {
-    "dragon": { "ally_stacks": 3, "enemy_stacks": 1, "status": "alive", "spawn_timer": 30 }
+    "dragon": { "allyCount": 3, "enemyCount": 1, "nextSpawnSec": 30, "soulPoint": true, "available": false, "type": "炎" },
+    "baron": { "available": true, "spawnSec": null },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
   },
-  "lane_state": "mid_pushed",
-  "ally_composition": "teamfight",
-  "enemy_threats": [],
+  "towers": {
+    "ally_lost": { "top": [], "mid": [], "bot": [] },
+    "enemy_lost": { "top": ["outer"], "mid": [], "bot": ["outer"] }
+  },
+  "lane_state": { "top": "unknown", "mid": "ally_pushing", "bot": "unknown" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "poke",
+  "enemy_threats": [{ "champion": "シンドラ", "reason": "fed_ap_carry", "level": 14, "items": 3 }],
   "action_candidates": [
-    { "action": "dragon_secure", "reason": "ソウルリーチ、確保優先", "priority": 1 },
-    { "action": "push_side_wave", "reason": "サイドウェーブ回収", "priority": 2 },
-    { "action": "group_mid", "reason": "集団戦準備", "priority": 3 }
+    { "action": "dragon_prep", "reason": "ドラゴンまであと30秒。ソウルリーチ", "priority": 1 },
+    { "action": "farm", "reason": "CSを稼いでアイテム差をつける", "priority": 4 },
+    { "action": "ward", "reason": "視界確保で情報有利を作る", "priority": 4 }
   ],
   "previous_advice": null
 }

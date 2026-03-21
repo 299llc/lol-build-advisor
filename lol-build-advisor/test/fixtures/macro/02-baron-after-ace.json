@@ -1,0 +1,46 @@
+{
+  "game_time": 1800,
+  "me": { "champion": "ヤスオ", "role": "MID", "level": 16, "kda": [8, 3, 4], "cs": 220, "gold": 1200, "status": "fed", "isDead": false, "hasTP": false, "ultReady": true },
+  "game_phase": "late",
+  "situation": "ahead",
+  "kill_diff": 8,
+  "gold_diff": 5000,
+  "allies": [
+    { "champion": "マルファイト", "role": "TOP", "level": 15, "status": "normal", "hasTP": true },
+    { "champion": "リーシン", "role": "JG", "level": 15, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 15, "status": "fed" },
+    { "champion": "レオナ", "role": "SUP", "level": 13, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 14, "status": "behind", "isDead": true, "respawnIn": 35, "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 14, "status": "normal", "isDead": true, "respawnIn": 30 },
+    { "champion": "シンドラ", "role": "MID", "level": 15, "status": "normal", "isDead": true, "respawnIn": 25 },
+    { "champion": "ケイトリン", "role": "ADC", "level": 14, "status": "behind", "isDead": true, "respawnIn": 40 },
+    { "champion": "ナミ", "role": "SUP", "level": 12, "status": "behind", "isDead": true, "respawnIn": 20 }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 2, "enemyCount": 2, "nextSpawnSec": null, "soulPoint": false, "available": false, "type": "山" },
+    "baron": { "available": true, "spawnSec": null },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": ["outer"], "mid": [], "bot": [] },
+    "enemy_lost": { "top": ["outer", "inner"], "mid": ["outer"], "bot": ["outer"] }
+  },
+  "lane_state": { "top": "ally_pushing", "mid": "ally_pushing", "bot": "unknown" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "poke",
+  "enemy_threats": [],
+  "enemy_behind": ["ダリウス", "ケイトリン", "ナミ"],
+  "ally_fed": ["ヤスオ", "ジンクス"],
+  "action_candidates": [
+    { "action": "baron_secure", "reason": "バロンが取得可能。敵5人デス中", "priority": 1 },
+    { "action": "push_tower", "reason": "敵5人デス中 - タワーを押す", "priority": 2 },
+    { "action": "invade", "reason": "敵5人デス中 - インベイド", "priority": 3 }
+  ],
+  "previous_advice": null
+}

@@ -1,0 +1,48 @@
+{
+  "_scenario": "味方ADCが死亡中(25秒後復活)、自分のRもCD中。ドラゴン取得可能だが集団戦すべきか",
+  "game_time": 1500,
+  "me": { "champion": "マルファイト", "role": "TOP", "level": 15, "kda": [2, 4, 8], "cs": 165, "gold": 900, "status": "normal", "isDead": false, "hasTP": true, "ultReady": false },
+  "game_phase": "mid",
+  "situation": "even",
+  "kill_diff": -1,
+  "gold_diff": -500,
+  "allies": [
+    { "champion": "リーシン", "role": "JG", "level": 14, "status": "normal" },
+    { "champion": "アーリ", "role": "MID", "level": 15, "status": "normal" },
+    { "champion": "ジンクス", "role": "ADC", "level": 14, "status": "normal", "isDead": true, "respawnIn": 25 },
+    { "champion": "レオナ", "role": "SUP", "level": 12, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 15, "status": "fed", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 15, "status": "normal" },
+    { "champion": "ゼド", "role": "MID", "level": 15, "status": "fed" },
+    { "champion": "ケイトリン", "role": "ADC", "level": 14, "status": "normal" },
+    { "champion": "ナミ", "role": "SUP", "level": 12, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 2, "enemyCount": 2, "nextSpawnSec": null, "soulPoint": false, "available": true, "type": "山" },
+    "baron": { "available": true, "spawnSec": null },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": ["outer"], "mid": [], "bot": ["outer"] },
+    "enemy_lost": { "top": ["outer"], "mid": [], "bot": ["outer"] }
+  },
+  "lane_state": { "top": "unknown", "mid": "enemy_pushing", "bot": "unknown" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "engage",
+  "enemy_threats": [
+    { "champion": "ダリウス", "reason": "fed_ad_carry", "level": 15, "items": 3 },
+    { "champion": "ゼド", "reason": "fed_ad_carry", "level": 15, "items": 3 }
+  ],
+  "action_candidates": [
+    { "action": "dragon_secure", "reason": "ドラゴンが取得可能", "priority": 1 },
+    { "action": "farm", "reason": "CSを稼いでアイテム差をつける", "priority": 4 },
+    { "action": "ward", "reason": "視界を確保して安全にプレイ", "priority": 4 }
+  ],
+  "previous_advice": null
+}

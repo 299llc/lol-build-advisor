@@ -1,0 +1,45 @@
+{
+  "_scenario": "所持ゴールド1300。大型アイテムが買えるがドラゴンが40秒後にスポーン。リコールすべきか",
+  "game_time": 1260,
+  "me": { "champion": "ジンクス", "role": "ADC", "level": 13, "kda": [4, 2, 3], "cs": 170, "gold": 1300, "status": "normal", "isDead": false, "hasTP": false, "ultReady": true },
+  "game_phase": "mid",
+  "situation": "even",
+  "kill_diff": 1,
+  "gold_diff": 800,
+  "allies": [
+    { "champion": "マルファイト", "role": "TOP", "level": 13, "status": "normal", "hasTP": true },
+    { "champion": "リーシン", "role": "JG", "level": 12, "status": "normal" },
+    { "champion": "アーリ", "role": "MID", "level": 13, "status": "normal" },
+    { "champion": "レオナ", "role": "SUP", "level": 10, "status": "normal" }
+  ],
+  "enemies": [
+    { "champion": "ダリウス", "role": "TOP", "level": 13, "status": "normal", "hasTP": true },
+    { "champion": "ヴィ", "role": "JG", "level": 12, "status": "normal" },
+    { "champion": "シンドラ", "role": "MID", "level": 13, "status": "normal" },
+    { "champion": "ケイトリン", "role": "ADC", "level": 13, "status": "normal" },
+    { "champion": "ナミ", "role": "SUP", "level": 10, "status": "normal" }
+  ],
+  "objectives": {
+    "dragon": { "allyCount": 2, "enemyCount": 1, "nextSpawnSec": 40, "soulPoint": false, "available": false, "type": "炎" },
+    "baron": { "available": false, "spawnSec": 540 },
+    "herald": { "available": false },
+    "voidgrub": { "available": false },
+    "buffs": { "baron": false, "elder": false }
+  },
+  "towers": {
+    "ally_lost": { "top": [], "mid": [], "bot": [] },
+    "enemy_lost": { "top": [], "mid": ["outer"], "bot": [] }
+  },
+  "lane_state": { "top": "unknown", "mid": "ally_pushing", "bot": "unknown" },
+  "ally_composition": "engage",
+  "ally_has_engager": true,
+  "ally_has_frontline": true,
+  "enemy_composition": "poke",
+  "enemy_threats": [],
+  "action_candidates": [
+    { "action": "dragon_prep", "reason": "ドラゴンまであと40秒", "priority": 2 },
+    { "action": "recall", "reason": "アイテムを完成させる", "priority": 4 },
+    { "action": "farm", "reason": "CSを稼いでアイテム差をつける", "priority": 4 }
+  ],
+  "previous_advice": null
+}

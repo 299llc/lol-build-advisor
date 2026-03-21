@@ -4,9 +4,10 @@
  *
  * 使い方:
  *   node test/harness/runner.js                        # ローカル(Ollama)で全テスト実行
+ *   node test/harness/runner.js --provider gemini      # Gemini APIで全テスト実行
  *   node test/harness/runner.js --provider bedrock     # Bedrockで全テスト実行
  *   node test/harness/runner.js --provider anthropic   # Anthropic APIで全テスト実行
- *   node test/harness/runner.js --type matchup         # マッチアップのみ
+ *   node test/harness/runner.js --type macro           # マクロのみ
  *   node test/harness/runner.js --verbose              # 詳細出力
  */
 
@@ -16,6 +17,7 @@ const { AiClient } = require('../../electron/api/aiClient')
 const { OllamaProvider } = require('../../electron/api/providers/ollamaProvider')
 const { BedrockProvider } = require('../../electron/api/providers/bedrockProvider')
 const { AnthropicProvider } = require('../../electron/api/providers/anthropicProvider')
+const { GeminiProvider } = require('../../electron/api/providers/geminiProvider')
 const { evaluateItem, evaluateMatchup, evaluateMacro, evaluateCoaching } = require('./evaluate')
 
 // ── CLI引数パース ──
@@ -88,6 +90,35 @@ function createProvider() {
       process.exit(1)
     }
     return new AnthropicProvider(apiKey)
+  }
+
+  if (providerArg === 'gemini') {
+    const envPath = path.join(__dirname, '..', '..', '.env')
+    const env = {}
+    try {
+      const content = fs.readFileSync(envPath, 'utf-8')
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const eqIdx = trimmed.indexOf('=')
+        if (eqIdx < 0) continue
+        const key = trimmed.substring(0, eqIdx).trim()
+        let value = trimmed.substring(eqIdx + 1).trim()
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1)
+        }
+        env[key] = value
+      }
+    } catch {
+      console.error('.env ファイルが見つかりません')
+      process.exit(1)
+    }
+    const apiKey = env.GEMINI_API_KEY
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY が .env に設定されていません')
+      process.exit(1)
+    }
+    return new GeminiProvider(apiKey)
   }
 
   // デフォルト: Ollama
