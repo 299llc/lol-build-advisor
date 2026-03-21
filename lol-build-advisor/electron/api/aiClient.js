@@ -6,7 +6,8 @@
  *
  * プロバイダー抽象化: AnthropicProvider (BYOK) / BedrockProvider (AWS) / OllamaProvider (ローカルLLM) を切り替え可能
  */
-const { DOMAIN_KNOWLEDGE, ITEM_PROMPT, MATCHUP_PROMPT, MACRO_PROMPT, COACHING_PROMPT } = require('../core/prompts')
+const { ITEM_PROMPT, MATCHUP_PROMPT, MACRO_PROMPT, COACHING_PROMPT } = require('../core/prompts')
+const { buildFullGameKnowledgeText } = require('../core/knowledge/game')
 const {
   LOCAL_ITEM_STEP1_PROMPT, LOCAL_ITEM_STEP2_PROMPT,
   LOCAL_MATCHUP_STEP1_PROMPT, LOCAL_MATCHUP_STEP2_PROMPT,
@@ -78,8 +79,11 @@ class AiClient {
    * @param {string} [extraContext] - 追加の静的コンテキスト（チーム構成等、試合中不変）
    */
   _buildSystem(taskPrompt, extraContext) {
+    if (!this._gameKnowledgeText) {
+      this._gameKnowledgeText = buildFullGameKnowledgeText()
+    }
     const blocks = [
-      { type: 'text', text: DOMAIN_KNOWLEDGE, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: this._gameKnowledgeText, cache_control: { type: 'ephemeral' } },
       { type: 'text', text: taskPrompt, cache_control: { type: 'ephemeral' } },
     ]
     if (this.championKnowledge) {

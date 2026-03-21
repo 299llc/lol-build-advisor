@@ -1,6 +1,16 @@
 /**
- * LoL マクロ戦略知識データ
- * ロール別/クラス別/フェーズ別の知識と、マクロ教科書
+ * LoL ゲーム知識データ — Single Source of Truth
+ * LoLに関するすべてのゲーム知識はこのファイルに集約する。
+ * 他のファイル（prompts.js等）にはゲーム知識を書かない。
+ *
+ * 構成:
+ * - ROLE_KNOWLEDGE: ロール別戦略
+ * - CLASS_KNOWLEDGE: チャンプクラス別知識
+ * - PHASE_KNOWLEDGE: フェーズ別知識
+ * - MACRO_TEXTBOOK: マクロ戦略教科書（全セクション）
+ * - TAG_TRAITS: チャンプタグから特性を推定
+ * - SECTION_LABELS: テキスト出力用の日本語セクション名
+ * - buildFullGameKnowledgeText(): 全知識をテキストとして出力（LLM用）
  */
 
 // ロール別の基本戦略知識
@@ -117,6 +127,82 @@ const PHASE_KNOWLEDGE = {
 //  buildMacroKnowledge() で状況に応じた章を選択して注入
 // ═══════════════════════════════════════════════════════════════
 const MACRO_TEXTBOOK = {
+
+  // ═══════════════════════════════════════════════════════════════
+  //  基礎知識（旧 domain.js から統合）
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── ゲームの基本構造 ──
+  gameBasics: [
+    '5v5のチーム戦。マップはサモナーズリフト（3レーン＋ジャングル）',
+    '勝利条件: 敵のネクサスを破壊すること',
+    'ゴールドはCS（ミニオン/モンスター撃破）、キル、アシスト、タワー破壊で獲得',
+  ],
+
+  // ── アイテムカテゴリとスタッツ ──
+  itemCategories: [
+    '攻撃力(AD): 物理ダメージ上昇。ADC/ファイター向け',
+    '魔力(AP): 魔法ダメージ上昇。メイジ/APアサシン向け',
+    '体力(HP): 全ダメージに対する耐久力。最も汎用的な防御スタッツ',
+    '物理防御(AR): 物理ダメージ軽減。敵ADキャリー/ファイター対策',
+    '魔法防御(MR): 魔法ダメージ軽減。敵メイジ/APチャンプ対策',
+    'クリティカル: 通常攻撃の確率ダメージ。ADCのコアスタッツ',
+    '脅威/貫通: 敵の防御を無視。スノーボール/終盤スケーリング',
+    'ライフスティール/オムニヴァンプ: ダメージに比例して回復',
+    'アビリティヘイスト(AH): スキルのクールダウン短縮',
+    '敵のAD/AP比率を確認し、多い方に対応する防御アイテムを優先',
+    '混合ダメージ構成にはHP積みが最も効率的',
+  ],
+
+  // ── 重傷（Grievous Wounds） ──
+  grievousWounds: [
+    '重傷: 敵の回復効果を40%減少させるデバフ',
+    '敵に回復量の多いチャンプ（エイトロックス、フィオラ、ソラカ等）がいる場合に必須',
+    'アイテム: モータルリマインダー(AD)、モレロノミコン(AP)、ソーンメイル(タンク)、ケミパンクチェーンソード(ファイター)',
+  ],
+
+  // ── CC（クラウドコントロール）の種類 ──
+  crowdControl: [
+    'スタン: 行動不能。スキル/移動/通常攻撃すべて封じる',
+    'ノックアップ: 行動不能＋空中に浮かす。テナシティで短縮不可',
+    'スネア/ルート: 移動不可だがスキル/通常攻撃は可能',
+    'サイレンス: スキル使用不可。通常攻撃と移動は可能',
+    'サプレッション: 行動不能＋QSSでのみ解除可能（マルザハールR等）',
+    'スロウ: 移動速度低下。最も一般的なCC',
+  ],
+
+  // ── ドラゴン属性と判断 ──
+  dragonElements: [
+    'ドラゴンは属性ごとにソウルの効果が異なる。優先度に影響する',
+    '炎（火力UP）: 攻撃的な構成に最適。高優先',
+    '山（耐久UP）: シールド付与。集団戦構成に強い',
+    '海（回復）: 持続戦に有利。ポーク構成と好相性',
+    '風（移動速度）: ローテーション向上。スプリット構成と好相性',
+    '化学（継続ダメージ+回復阻害）: 回復持ち構成へのカウンター',
+    '氷結（スロウ付与）: キャッチ/エンゲージ構成に有利',
+    '4体獲得でドラゴンソウル（強力な永続バフ）。5体目以降はエルダードラゴン',
+  ],
+
+  // ── バフの活用 ──
+  buffUsage: [
+    'バロンバフ(180秒): ミニオンが強化される。即グループしてタワーを押す。スプリットよりグループ推奨',
+    'バロンバフ中にソロで捕まると大損。チームで行動すること',
+    'エルダーバフ(150秒): 敵HPが20%以下で即死させる処刑効果。即集団戦を仕掛ける',
+    'エルダーバフの持続時間は短い。迷わず戦うこと',
+    'エルダーを取られた場合は150秒間戦闘を避けて耐える',
+  ],
+
+  // ── アルティメットとエンゲージ判断 ──
+  ultimateManagement: [
+    'R(アルティメット)が使用不可の場合、集団戦参加は避ける',
+    'Rが上がるまでファームやワーディングで時間を稼ぐ判断も重要',
+    '味方のULTが2人以上CDなら集団戦を避ける',
+    'エンゲージ判断: 人数有利、スペル有利、ポジション有利のうち2つ以上ある時にファイト開始',
+  ],
+
+  // ═══════════════════════════════════════════════════════════════
+  //  マクロ戦略教科書
+  // ═══════════════════════════════════════════════════════════════
 
   // ── 勝利条件の見極め ──
   winConditions: [
@@ -722,4 +808,106 @@ const TAG_TRAITS = {
   Support: { style: 'サポート（味方補助・CC・視界）', teamfight: 'ピールorエンゲージ', scaling: '序盤〜中盤' },
 }
 
-module.exports = { ROLE_KNOWLEDGE, CLASS_KNOWLEDGE, PHASE_KNOWLEDGE, MACRO_TEXTBOOK, TAG_TRAITS }
+// ── セクションラベル（テキスト生成用） ──
+const SECTION_LABELS = {
+  gameBasics: 'ゲームの基本構造',
+  itemCategories: 'アイテムカテゴリとスタッツ',
+  grievousWounds: '重傷（Grievous Wounds）',
+  crowdControl: 'CC（クラウドコントロール）の種類',
+  dragonElements: 'ドラゴン属性と判断',
+  buffUsage: 'バフの活用',
+  ultimateManagement: 'アルティメットとエンゲージ判断',
+  winConditions: '勝利条件の見極め',
+  waveManagement: 'ウェーブ管理',
+  earlyWaveManagement: '序盤のウェーブ管理',
+  laneTrading: 'レーンでのトレード',
+  recallTiming: 'リコールタイミング',
+  visionControl: 'ビジョンコントロール',
+  earlyVision: 'ビジョン（序盤）',
+  lateVision: 'ビジョン（中盤以降）',
+  objectivePriority: 'オブジェクト判断',
+  objectivePrep: 'オブジェクト準備の3習慣',
+  voidgrub: 'ヴォイドグラブ',
+  herald: 'ヘラルド',
+  jungleTracking: 'ジャングルトラッキング',
+  playingFromBehind: '劣勢時の戦い方',
+  closingOutGames: '優勢時の畳み方',
+  splitPush: 'スプリットプッシュ',
+  teamfighting: 'チーム戦',
+  teamfightByRole: 'ロール別チーム戦',
+  towerDiving: 'タワーダイブ',
+  powerSpikes: 'パワースパイク',
+  goldXpAdvantage: 'ゴールド/経験値の理解',
+  roaming: 'ローム',
+  tempoAndInitiative: 'テンポとイニシアチブ',
+  crossMapPlay: 'クロスマッププレイ',
+  slowPushIntoDive: 'スロープッシュからダイブ',
+  laneStateBeforeObjectives: 'オブジェクト前のレーン状態',
+  resetOptimization: 'リセット（リコール）の最適化',
+  minionWaveMath: 'ミニオンウェーブの計算',
+  experienceDenial: '経験値の否定（ゾーニング）',
+  towerAggroManagement: 'タワーアグロ管理',
+  winConditionIdentification: '勝利条件の特定',
+  powerSpikeTracking: 'パワースパイク追跡',
+  goldLeadInterpretation: 'ゴールドリードの解釈',
+  teamCompSynergy: 'チーム構成シナジー',
+  draftCounterStrategy: 'ドラフトカウンター戦略',
+  fightOrFlight: '戦うか撤退かの判断',
+  baronBait: 'バロンベイト',
+  inhibitorPriority: 'インヒビターの優先順位',
+  baseRaceDecision: 'ベースレース判断',
+  elderDragon: 'エルダードラゴン',
+  comebackGoldMechanics: 'カムバックゴールド（バウンティ）',
+  deathTimerAbuse: 'デスタイマー活用',
+  summonerSpellTracking: 'サモナースペル追跡',
+  tradingStance: 'トレーディングスタンス',
+  tethering: 'テザリング',
+  abilityCooldownWindows: 'アビリティCD活用',
+  autoAttackSpacing: 'AA間隔とカイティング',
+  fogOfWarUsage: '霧（FoW）とブッシュの活用',
+  midGameTransition: '中盤トランジション',
+  counterJungling: 'カウンタージャングルとインベード',
+  teleportUsage: 'テレポート運用',
+  communication: 'コミュニケーションとピン',
+}
+
+/**
+ * 全ゲーム知識をテキストとして出力する。
+ * LLMのシステムプロンプトに渡すための全量テキスト。
+ * MACRO_TEXTBOOK + ROLE_KNOWLEDGE から自動生成。
+ */
+function buildFullGameKnowledgeText() {
+  const lines = ['【League of Legends ゲーム知識】']
+
+  // MACRO_TEXTBOOK 全セクション
+  for (const [key, value] of Object.entries(MACRO_TEXTBOOK)) {
+    const label = SECTION_LABELS[key] || key
+    if (Array.isArray(value)) {
+      lines.push(`\n■ ${label}`)
+      for (const tip of value) lines.push(`- ${tip}`)
+    } else if (typeof value === 'object') {
+      lines.push(`\n■ ${label}`)
+      for (const [subKey, subVal] of Object.entries(value)) {
+        lines.push(`- ${subKey}: ${subVal}`)
+      }
+    }
+  }
+
+  // ロール別戦略
+  lines.push('\n\n【ロール別戦略】')
+  for (const [role, info] of Object.entries(ROLE_KNOWLEDGE)) {
+    lines.push(`\n■ ${role}`)
+    lines.push(`優先事項: ${info.priorities.join('、')}`)
+    lines.push(`CS目安: ${info.csTarget}/分`)
+    lines.push(`序盤: ${info.earlyGame}`)
+    lines.push(`中盤: ${info.midGame}`)
+    lines.push(`終盤: ${info.lateGame}`)
+  }
+
+  return lines.join('\n')
+}
+
+module.exports = {
+  ROLE_KNOWLEDGE, CLASS_KNOWLEDGE, PHASE_KNOWLEDGE, MACRO_TEXTBOOK, TAG_TRAITS,
+  SECTION_LABELS, buildFullGameKnowledgeText
+}

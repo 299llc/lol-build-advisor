@@ -4,7 +4,7 @@
  */
 
 const { ROLE_DEEP_KNOWLEDGE, CLASS_DEEP_KNOWLEDGE } = require('./knowledge/deepKnowledge')
-const { ROLE_KNOWLEDGE, CLASS_KNOWLEDGE, PHASE_KNOWLEDGE, MACRO_TEXTBOOK, TAG_TRAITS } = require('./knowledge/macro')
+const { ROLE_KNOWLEDGE, CLASS_KNOWLEDGE, PHASE_KNOWLEDGE, MACRO_TEXTBOOK, TAG_TRAITS } = require('./knowledge/game')
 const { RANK_COACHING, RANK_BENCHMARKS } = require('./knowledge/rank')
 
 /**

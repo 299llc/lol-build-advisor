@@ -684,7 +684,8 @@ async function requestMacroAdvice(gameData, me, allies, enemies) {
     const structuredInput = state.preprocessor.buildMacroInput(gameState, events)
 
     // 状況未変化ならスキップ（コスト削減）
-    const macroFingerprint = `${structuredInput.game_phase}|${structuredInput.situation}|${structuredInput.kill_diff}|${structuredInput.action_candidates.map(c => c.action).join(',')}|${JSON.stringify(structuredInput.objectives)}|${JSON.stringify(structuredInput.towers)}`
+    const deadEnemies = (structuredInput.enemies || []).filter(e => e.isDead).map(e => e.champion).join(',')
+    const macroFingerprint = `${structuredInput.game_phase}|${structuredInput.situation}|${structuredInput.kill_diff}|${structuredInput.action_candidates.map(c => c.action).join(',')}|${JSON.stringify(structuredInput.objectives)}|${JSON.stringify(structuredInput.towers)}|${deadEnemies}`
     if (macroFingerprint === state._lastMacroFingerprint) {
       macroLog(`Skipped: situation unchanged`)
       state.macroPending = false

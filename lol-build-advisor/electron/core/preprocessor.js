@@ -311,8 +311,10 @@ class Preprocessor {
     const timers = getObjectiveTimers(events, gameTime)
     const available = getAvailableObjectiveNames(events, gameTime)
 
-    // ドラゴン取得チーム別カウント（KillerNameからチーム判定）
+    // ドラゴン取得チーム別カウント・属性追跡（KillerNameからチーム判定）
     let dragonAllyCount = 0, dragonEnemyCount = 0
+    const DRAGON_TYPE_MAP = { Fire: '炎', Earth: '山', Water: '海', Air: '風', Chemtech: '化学', Hextech: '氷結', Elder: 'エルダー' }
+    let lastDragonType = null
     for (const ev of classified.dragon) {
       const killerName = ev.KillerName || ''
       const isAlly = allyAllPlayers.some(p =>
@@ -320,7 +322,18 @@ class Preprocessor {
       )
       if (isAlly) dragonAllyCount++
       else dragonEnemyCount++
+      if (ev.DragonType) lastDragonType = DRAGON_TYPE_MAP[ev.DragonType] || ev.DragonType
     }
+
+    // バロン/エルダーバフ判定（取得後180秒間有効）
+    const BARON_BUFF_DURATION = 180
+    const ELDER_BUFF_DURATION = 150
+    const lastBaronEvent = classified.baron[classified.baron.length - 1]
+    const hasBaronBuff = lastBaronEvent && (gameTime - (lastBaronEvent.EventTime || 0)) < BARON_BUFF_DURATION
+      && allyAllPlayers.some(p => p.summonerName === lastBaronEvent.KillerName || p.riotIdGameName === lastBaronEvent.KillerName || p.championName === lastBaronEvent.KillerName)
+    const lastElderEvent = classified.dragon.filter(e => e.DragonType === 'Elder').pop()
+    const hasElderBuff = lastElderEvent && (gameTime - (lastElderEvent.EventTime || 0)) < ELDER_BUFF_DURATION
+      && allyAllPlayers.some(p => p.summonerName === lastElderEvent.KillerName || p.riotIdGameName === lastElderEvent.KillerName || p.championName === lastElderEvent.KillerName)
 
     const objectives = {
       dragon: {
@@ -328,7 +341,8 @@ class Preprocessor {
         enemyCount: dragonEnemyCount,
         nextSpawnSec: timers.dragon > 0 ? timers.dragon : null,
         soulPoint: dragonAllyCount >= 3 || dragonEnemyCount >= 3,
-        available: available.includes('ドラゴン')
+        available: available.includes('ドラゴン'),
+        type: lastDragonType
       },
       baron: {
         available: available.includes('バロン'),
@@ -339,6 +353,10 @@ class Preprocessor {
       },
       voidgrub: {
         available: available.includes('ヴォイドグラブ')
+      },
+      buffs: {
+        baron: hasBaronBuff || false,
+        elder: hasElderBuff || false
       },
       // 後方互換: 既存コードが使う形式も残す
       timers,
@@ -377,7 +395,13 @@ class Preprocessor {
       kda: [p.scores?.kills || 0, p.scores?.deaths || 0, p.scores?.assists || 0],
       cs: p.scores?.creepScore || 0,
       status: judgeStatus(p.scores, gamePhase),
-      estimatedGold: estimateGold(p)
+      estimatedGold: estimateGold(p),
+      isDead: p.isDead || false,
+      respawnTimer: p.respawnTimer || 0,
+      hasTP: (p.summonerSpells?.summonerSpellOne?.displayName === 'テレポート' ||
+              p.summonerSpells?.summonerSpellTwo?.displayName === 'テレポート' ||
+              p.summonerSpells?.summonerSpellOne?.displayName === 'Teleport' ||
+              p.summonerSpells?.summonerSpellTwo?.displayName === 'Teleport') || false
     })
 
     return {
@@ -395,7 +419,14 @@ class Preprocessor {
         cs: me.scores?.creepScore || 0,
         gold: activePlayer?.currentGold || 0,
         status: judgeStatus(me.scores, gamePhase),
-        estimatedGold: estimateGold(me)
+        estimatedGold: estimateGold(me),
+        isDead: me.isDead || false,
+        respawnTimer: me.respawnTimer || 0,
+        hasTP: (me.summonerSpells?.summonerSpellOne?.displayName === 'テレポート' ||
+                me.summonerSpells?.summonerSpellTwo?.displayName === 'テレポート' ||
+                me.summonerSpells?.summonerSpellOne?.displayName === 'Teleport' ||
+                me.summonerSpells?.summonerSpellTwo?.displayName === 'Teleport') || false,
+        ultReady: (activePlayer?.abilities?.R?.abilityLevel || 0) > 0
       },
       allies: allies.map(buildPlayerInfo),
       enemies: enemies.map(buildPlayerInfo),
@@ -572,19 +603,16 @@ class Preprocessor {
       actionCandidates.push({ action: 'baron_prep', reason: `バロンまであと${timers.baron}秒`, priority: 2 })
     }
 
-    // 3. 人数有利（最近のキルイベントで敵デス中）
+    // 3. 人数有利（敵の死亡状態から判定）
     const gameTime = gameState.gameTime
-    const recentKills = events.filter(e =>
-      e.EventName === 'ChampionKill' && (gameTime - (e.EventTime || 0)) < 30
-    )
-    // 味方キル数 vs 敵キル数（直近30秒）
-    const recentAllyKills = recentKills.filter(e => {
-      // KillerNameがalliesかmeなら味方キル
-      return true // イベントからチーム判定は難しいのでキル差から推定
-    }).length
-    if (gameState.killDiff > 0 && recentKills.length > 0) {
-      actionCandidates.push({ action: 'push_tower', reason: '人数有利の可能性 - タワーを押す', priority: 3 })
-      actionCandidates.push({ action: 'invade', reason: '人数有利の可能性 - インベイド', priority: 3 })
+    const deadEnemyCount = gameState.enemies.filter(e => e.isDead).length
+    const deadAllyCount = gameState.allies.filter(a => a.isDead).length + (gameState.me.isDead ? 1 : 0)
+    const numberAdvantage = deadEnemyCount - deadAllyCount
+    if (numberAdvantage >= 1 && !gameState.me.isDead) {
+      actionCandidates.push({ action: 'push_tower', reason: `敵${deadEnemyCount}人デス中 - タワーを押す`, priority: 3 })
+      if (numberAdvantage >= 2) {
+        actionCandidates.push({ action: 'invade', reason: `敵${deadEnemyCount}人デス中 - インベイド`, priority: 3 })
+      }
     }
 
     // 4. デフォルトアクション（戦況に応じて）
@@ -606,26 +634,60 @@ class Preprocessor {
     actionCandidates.sort((a, b) => a.priority - b.priority)
     const topActions = actionCandidates.slice(0, 3)
 
+    // 味方/敵のプレイヤー概要（マクロ判断用にコンパクトに）
+    const buildMacroPlayer = (p) => {
+      const info = { champion: p.champion, role: p.position, level: p.level, status: p.status }
+      if (p.isDead) {
+        info.isDead = true
+        if (p.respawnTimer > 0) info.respawnIn = Math.ceil(p.respawnTimer)
+      }
+      if (p.hasTP) info.hasTP = true
+      return info
+    }
+
+    // 敵のbehindプレイヤー名一覧
+    const enemyBehind = gameState.enemy.behindPlayers
+      ?.map(p => p.champion || p.enName)
+      .filter(Boolean) || []
+
     return {
+      game_time: gameState.gameTime,
       me: {
         champion: gameState.me.champion,
         role: gameState.me.position,
         level: gameState.me.level,
-        status: gameState.me.status
+        kda: gameState.me.kda,
+        cs: gameState.me.cs,
+        gold: gameState.me.gold,
+        status: gameState.me.status,
+        isDead: gameState.me.isDead,
+        hasTP: gameState.me.hasTP,
+        ultReady: gameState.me.ultReady
       },
       game_phase: gameState.gamePhase,
       situation: gameState.situation,
       kill_diff: gameState.killDiff,
+      gold_diff: gameState.ally.estimatedGold - gameState.enemy.estimatedGold,
+      allies: gameState.allies.map(buildMacroPlayer),
+      enemies: gameState.enemies.map(buildMacroPlayer),
       objectives: {
         dragon: gameState.objectives.dragon,
         baron: gameState.objectives.baron,
         herald: gameState.objectives.herald,
-        voidgrub: gameState.objectives.voidgrub
+        voidgrub: gameState.objectives.voidgrub,
+        buffs: gameState.objectives.buffs
       },
       towers: gameState.towers,
       lane_state: gameState.laneState,
       ally_composition: gameState.ally.composition,
+      ally_has_engager: gameState.ally.hasEngager,
+      ally_has_frontline: gameState.ally.hasFrontline,
+      enemy_composition: gameState.enemy.composition,
       enemy_threats: gameState.enemy.threats,
+      enemy_behind: enemyBehind.length > 0 ? enemyBehind : undefined,
+      ally_fed: gameState.ally.fedPlayers?.length > 0
+        ? gameState.ally.fedPlayers.map(p => p.champion || p.enName || p).filter(Boolean)
+        : undefined,
       action_candidates: topActions,
       previous_advice: this.previousMacroAdvice
     }
