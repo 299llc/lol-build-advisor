@@ -6,13 +6,13 @@ class DiffDetector {
   constructor() {
     this.lastData = null
     this.lastCallTime = 0
-    this.debounceMs = 10000 // 10秒デバウンス
+    this.debounceMs = 90000 // 90秒デバウンス
   }
 
   check(gameData) {
     const now = Date.now()
 
-    // デバウンス: 前回呼び出しから10秒以内はスキップ
+    // デバウンス: 前回呼び出しから90秒以内はスキップ
     if (now - this.lastCallTime < this.debounceMs) return false
 
     if (!this.lastData) {
@@ -37,8 +37,8 @@ class DiffDetector {
     // ゲームフェーズ遷移（設計書9.6）
     if (curr.gamePhase !== prev.gamePhase) reasons.push(`phase:${prev.gamePhase}->${curr.gamePhase}`)
 
-    // 60秒定期更新（設計書9.6: 一定時間60秒経過）
-    if (now - this.lastCallTime >= 60000) reasons.push('periodic_60s')
+    // 90秒定期更新（設計書9.6: コスト最適化のため60→90秒に延長）
+    if (now - this.lastCallTime >= 90000) reasons.push('periodic_90s')
 
     if (reasons.length > 0) {
       console.log(`[DiffDetector] Triggered: ${reasons.join(', ')}`)

@@ -7,7 +7,7 @@ module.exports = {
   AI_DEBOUNCE_MS: 10000,
 
   // マクロアドバイス（設計書9.6: デバウンス30-60秒）
-  MACRO_INTERVAL_MS: 60000,
+  MACRO_INTERVAL_MS: 90000,
   MACRO_DEBOUNCE_MS: 30000,
 
   // オブジェクトスポーンタイム (秒) — Season 2024/2025
