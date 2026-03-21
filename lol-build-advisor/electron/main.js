@@ -1624,6 +1624,11 @@ function handleMacroAdvice(gameData, me, allies, enemies) {
   if (objectiveCount > state.lastObjectiveCount) state.lastObjectiveCount = objectiveCount
   if (turretCount > (state.lastTurretCount || 0)) state.lastTurretCount = turretCount
 
+  // キル/デス検出トリガー
+  const championKillCount = events.filter(e => e.EventName === 'ChampionKill').length
+  const killDeathOccurred = championKillCount > (state.lastChampionKillCount || 0)
+  if (championKillCount > (state.lastChampionKillCount || 0)) state.lastChampionKillCount = championKillCount
+
   const timeSinceLastMacro = now - state.lastMacroTime
 
   // オブジェクトスポーン90秒前トリガー
@@ -1648,11 +1653,14 @@ function handleMacroAdvice(gameData, me, allies, enemies) {
 
   const shouldMacro = timeSinceLastMacro >= MACRO_INTERVAL_MS ||
     objectiveTaken ||
-    objectivePreTrigger
+    objectivePreTrigger ||
+    (killDeathOccurred && timeSinceLastMacro >= MACRO_DEBOUNCE_MS)
 
   if (state.aiClient && state.aiEnabled && !state.macroPending && shouldMacro) {
     state.lastMacroTime = now
-    if (objectivePreTrigger) {
+    if (killDeathOccurred) {
+      macroLog(`Triggering macro advice (kill/death detected)`)
+    } else if (objectivePreTrigger) {
       macroLog(`Triggering macro advice (objective approaching: ${approachingObjs.join(', ')})`)
     } else {
       macroLog(`Triggering macro advice`)
