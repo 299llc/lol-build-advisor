@@ -5,3 +5,6 @@ dist/
 *.appx
 release/
 build/appx/*.png
+
+# Terminal Paste Image folder
+.cp-images/

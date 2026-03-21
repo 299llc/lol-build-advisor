@@ -143,11 +143,11 @@ class Postprocessor {
 
     // 3. 各フィールドの文字数チェック
     return {
-      summary: this._truncate(raw.summary, 50),
-      tips: raw.tips.map(t => this._truncate(t, 80)),
-      playstyle: this._truncate(raw.playstyle, 100),
-      danger: this._truncate(raw.danger, 80),
-      power_spike: this._truncate(raw.power_spike, 80),
+      summary: typeof raw.summary === 'string' ? raw.summary : '',
+      tips: raw.tips.map(t => typeof t === 'string' ? t : ''),
+      playstyle: typeof raw.playstyle === 'string' ? raw.playstyle : '',
+      danger: typeof raw.danger === 'string' ? raw.danger : '',
+      power_spike: typeof raw.power_spike === 'string' ? raw.power_spike : '',
     }
   }
 
