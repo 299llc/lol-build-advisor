@@ -141,7 +141,7 @@ class Postprocessor {
       return this._generateFallbackTip(opponentData)
     }
 
-    // 3. 各フィールドの文字数チェック
+    // 3. 各フィールドの型チェック
     return {
       summary: typeof raw.summary === 'string' ? raw.summary : '',
       tips: raw.tips.map(t => typeof t === 'string' ? t : ''),
