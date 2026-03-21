@@ -95,10 +95,6 @@ const mockAPI = {
   toggleAi: () => Promise.resolve(true),
   getAiStatus: () => Promise.resolve(true),
 
-  // 最前面
-  toggleOnTop: () => Promise.resolve(),
-  getOnTopStatus: () => Promise.resolve(false),
-
   // デバッグ
   getAiLogs: () => Promise.resolve([]),
   clearAiLogs: () => Promise.resolve(),

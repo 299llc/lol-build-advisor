@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { X, Navigation, Loader2, AlertTriangle } from 'lucide-react'
-import { ItemTooltip } from './ItemTooltip'
 
 function formatGameTime(seconds) {
   if (seconds == null || seconds <= 0) return null
@@ -51,23 +50,21 @@ function CompactItems({ coreBuild, suggestion, substituteItems, ownedItemIds, dd
         const imgUrl = ddragon && coreImages[i] ? `${ddragon}/img/item/${coreImages[i]}` : null
         const isOwned = ownedItemIds?.has(String(coreIds[i]))
         return (
-          <ItemTooltip key={`core-${i}`} itemId={coreIds[i]}>
-            <div className={`relative cursor-default ${isOwned ? 'opacity-30' : ''}`}>
-              {imgUrl ? (
-                <img src={imgUrl} alt={item} className="w-7 h-7 rounded border border-white/20"
-                  onError={(e) => { e.target.style.display = 'none' }} />
-              ) : (
-                <div className="w-7 h-7 rounded border border-white/10 bg-white/5 flex items-center justify-center">
-                  <span className="text-[9px] text-white/40">{i + 1}</span>
-                </div>
-              )}
-              {isOwned && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-lol-blue text-[10px] font-bold">✓</span>
-                </div>
-              )}
-            </div>
-          </ItemTooltip>
+          <div key={`core-${i}`} className={`relative ${isOwned ? 'opacity-30' : ''}`}>
+            {imgUrl ? (
+              <img src={imgUrl} alt={item} className="w-7 h-7 rounded border border-white/20"
+                onError={(e) => { e.target.style.display = 'none' }} />
+            ) : (
+              <div className="w-7 h-7 rounded border border-white/10 bg-white/5 flex items-center justify-center">
+                <span className="text-[9px] text-white/40">{i + 1}</span>
+              </div>
+            )}
+            {isOwned && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-lol-blue text-[10px] font-bold">✓</span>
+              </div>
+            )}
+          </div>
         )
       })}
       {/* 区切り */}
@@ -78,18 +75,16 @@ function CompactItems({ coreBuild, suggestion, substituteItems, ownedItemIds, dd
       {aiItems.map(item => {
         const imgUrl = ddragon && item.image ? `${ddragon}/img/item/${item.image}` : null
         return (
-          <ItemTooltip key={`ai-${item.id}`} itemId={item.id}>
-            <div className="relative cursor-default">
-              {imgUrl ? (
-                <img src={imgUrl} alt={item.name} className="w-7 h-7 rounded border border-lol-blue/40"
-                  onError={(e) => { e.target.style.display = 'none' }} />
-              ) : (
-                <div className="w-7 h-7 rounded border border-lol-blue/30 bg-white/5 flex items-center justify-center">
-                  <span className="text-[9px] text-white/40">AI</span>
-                </div>
-              )}
-            </div>
-          </ItemTooltip>
+          <div key={`ai-${item.id}`} className="relative">
+            {imgUrl ? (
+              <img src={imgUrl} alt={item.name} className="w-7 h-7 rounded border border-lol-blue/40"
+                onError={(e) => { e.target.style.display = 'none' }} />
+            ) : (
+              <div className="w-7 h-7 rounded border border-lol-blue/30 bg-white/5 flex items-center justify-center">
+                <span className="text-[9px] text-white/40">AI</span>
+              </div>
+            )}
+          </div>
         )
       })}
     </div>

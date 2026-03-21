@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Check, Loader2, AlertCircle, Pin, RefreshCw, FolderOpen, ChevronDown, Download, Play, Zap, Trash2, FileText, Scale, Cloud, Monitor } from 'lucide-react'
+import { X, Check, Loader2, AlertCircle, RefreshCw, FolderOpen, ChevronDown, Download, Play, Zap, Trash2, FileText, Scale, Cloud, Monitor } from 'lucide-react'
 import { LegalDialog } from './LegalDialog'
 
 // ダウンロード可能なモデル一覧
@@ -201,7 +201,6 @@ function StatusItem({ label, ok }) {
 
 export function SettingsDialog({ onClose }) {
   const [aiOn, setAiOn] = useState(false)
-  const [onTop, setOnTop] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState(null)
   const [legalPage, setLegalPage] = useState(null) // 'privacy' | 'disclaimer' | null
@@ -218,14 +217,11 @@ export function SettingsDialog({ onClose }) {
   const [pullProgress, setPullProgress] = useState(null)
 
   // クラウドプロバイダー設定
-  const [cloudSubType, setCloudSubType] = useState('bedrock') // 'bedrock' | 'anthropic'
-  const [anthropicKey, setAnthropicKey] = useState('')
+  const [cloudSubType, setCloudSubType] = useState('bedrock') // 'bedrock' | 'anthropic' | 'gemini'
   const [cloudStatus, setCloudStatus] = useState(null) // 'connected' | 'error' | 'validating' | null
 
   useEffect(() => {
     window.electronAPI?.getAiStatus().then(on => setAiOn(!!on))
-    window.electronAPI?.getOnTopStatus().then(on => setOnTop(!!on))
-
     // プロバイダー復元
     window.electronAPI?.getProvider().then(p => {
       if (p?.type === 'bedrock') {
@@ -235,6 +231,10 @@ export function SettingsDialog({ onClose }) {
       } else if (p?.type === 'anthropic') {
         setProviderType('cloud')
         setCloudSubType('anthropic')
+        setCloudStatus('connected')
+      } else if (p?.type === 'gemini') {
+        setProviderType('cloud')
+        setCloudSubType('gemini')
         setCloudStatus('connected')
       } else {
         setProviderType('ollama')
@@ -323,22 +323,12 @@ export function SettingsDialog({ onClose }) {
       const result = await window.electronAPI?.setBedrockProvider()
       setCloudStatus(result?.success ? 'connected' : 'error')
     } else if (subType === 'anthropic') {
-      // APIキー未入力なら入力待ち
-      if (!anthropicKey) {
-        setCloudStatus(null)
-        return
-      }
-      const result = await window.electronAPI?.setAnthropicProvider(anthropicKey)
+      const result = await window.electronAPI?.setAnthropicProvider()
+      setCloudStatus(result?.success ? 'connected' : 'error')
+    } else if (subType === 'gemini') {
+      const result = await window.electronAPI?.setGeminiProvider()
       setCloudStatus(result?.success ? 'connected' : 'error')
     }
-  }
-
-  // Anthropic APIキー送信
-  const connectAnthropic = async () => {
-    if (!anthropicKey) return
-    setCloudStatus('validating')
-    const result = await window.electronAPI?.setAnthropicProvider(anthropicKey)
-    setCloudStatus(result?.success ? 'connected' : 'error')
   }
 
   return (
@@ -352,20 +342,6 @@ export function SettingsDialog({ onClose }) {
         </div>
 
         <div className="p-4 space-y-4">
-          {/* 最前面 ON/OFF トグル */}
-          <div className="flex items-center justify-between py-2 px-3 rounded bg-lol-bg border border-lol-gold-dim/30">
-            <div className="flex items-center gap-2">
-              <Pin size={14} className={onTop ? 'text-lol-gold' : 'text-lol-text'} />
-              <span className="text-xs text-lol-text-light">常に最前面に表示</span>
-            </div>
-            <button
-              onClick={async () => { const next = !onTop; await window.electronAPI?.toggleOnTop(next); setOnTop(next) }}
-              className={`relative w-10 h-5 rounded-full transition-colors ${onTop ? 'bg-lol-gold' : 'bg-lol-surface-light'}`}
-            >
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${onTop ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-
           {/* ── AI セットアップ ── */}
           <div className="space-y-2 p-3 rounded bg-lol-bg border border-lol-blue/20">
             <div className="flex items-center justify-between">
@@ -532,6 +508,16 @@ export function SettingsDialog({ onClose }) {
                   >
                     Anthropic API
                   </button>
+                  <button
+                    onClick={() => connectCloud('gemini')}
+                    className={`flex-1 py-1 text-[10px] rounded transition-colors ${
+                      cloudSubType === 'gemini'
+                        ? 'bg-lol-gold/15 text-lol-gold border border-lol-gold/30'
+                        : 'text-lol-text border border-lol-gold-dim/20 hover:border-lol-gold/20'
+                    }`}
+                  >
+                    Gemini
+                  </button>
                 </div>
 
                 {/* Bedrock ステータス */}
@@ -544,31 +530,23 @@ export function SettingsDialog({ onClose }) {
                   </div>
                 )}
 
-                {/* Anthropic APIキー入力 */}
+                {/* Anthropic ステータス */}
                 {cloudSubType === 'anthropic' && (
-                  <div className="space-y-1.5">
-                    <div className="flex gap-1.5">
-                      <input
-                        type="password"
-                        value={anthropicKey}
-                        onChange={(e) => setAnthropicKey(e.target.value)}
-                        placeholder="sk-ant-..."
-                        className="flex-1 px-2 py-1.5 bg-lol-surface border border-lol-gold-dim/30 rounded text-[11px] text-lol-text-light focus:outline-none focus:border-lol-gold/50 placeholder:text-lol-text/30"
-                      />
-                      <button
-                        onClick={connectAnthropic}
-                        disabled={!anthropicKey || cloudStatus === 'validating'}
-                        className="px-3 py-1.5 text-[10px] rounded bg-lol-gold/20 text-lol-gold border border-lol-gold/30 hover:bg-lol-gold/30 disabled:opacity-40 transition-colors"
-                      >
-                        {cloudStatus === 'validating' ? '確認中...' : '接続'}
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 px-1">
-                      <div className={`w-2 h-2 rounded-full ${cloudStatus === 'connected' ? 'bg-lol-accent' : cloudStatus === 'error' ? 'bg-lol-red' : cloudStatus === 'validating' ? 'bg-lol-blue animate-pulse' : 'bg-lol-text/30'}`} />
-                      <span className="text-[11px] text-lol-text-light">
-                        {cloudStatus === 'connected' ? 'Anthropic API 接続済み' : cloudStatus === 'error' ? 'API接続失敗 — キーを確認してください' : cloudStatus === 'validating' ? '接続確認中...' : 'APIキーを入力してください'}
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-2 px-1">
+                    <div className={`w-2 h-2 rounded-full ${cloudStatus === 'connected' ? 'bg-lol-accent' : cloudStatus === 'error' ? 'bg-lol-red' : cloudStatus === 'validating' ? 'bg-lol-blue animate-pulse' : 'bg-lol-text/30'}`} />
+                    <span className="text-[11px] text-lol-text-light">
+                      {cloudStatus === 'connected' ? 'Anthropic API 接続済み' : cloudStatus === 'error' ? 'Anthropic 接続失敗 — .env を確認してください' : cloudStatus === 'validating' ? '接続確認中...' : '未接続'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Gemini ステータス */}
+                {cloudSubType === 'gemini' && (
+                  <div className="flex items-center gap-2 px-1">
+                    <div className={`w-2 h-2 rounded-full ${cloudStatus === 'connected' ? 'bg-lol-accent' : cloudStatus === 'error' ? 'bg-lol-red' : cloudStatus === 'validating' ? 'bg-lol-blue animate-pulse' : 'bg-lol-text/30'}`} />
+                    <span className="text-[11px] text-lol-text-light">
+                      {cloudStatus === 'connected' ? 'Gemini API 接続済み' : cloudStatus === 'error' ? 'Gemini 接続失敗 — .env を確認してください' : cloudStatus === 'validating' ? '接続確認中...' : '未接続'}
+                    </span>
                   </div>
                 )}
               </div>

@@ -5,6 +5,8 @@ const { LiveClientPoller } = require('./api/liveClient')
 const { AiClient } = require('./api/aiClient')
 const { OllamaProvider } = require('./api/providers/ollamaProvider')
 const { BedrockProvider } = require('./api/providers/bedrockProvider')
+const { AnthropicProvider } = require('./api/providers/anthropicProvider')
+const { GeminiProvider } = require('./api/providers/geminiProvider')
 const { OllamaSetup } = require('./api/ollamaSetup')
 const { ContextBuilder, extractEnName } = require('./api/contextBuilder')
 const { DiffDetector } = require('./api/diffDetector')
@@ -199,8 +201,6 @@ function createWindow() {
 
   state.isDev = !app.isPackaged
   state.aiEnabled = settings.aiEnabled ?? false
-  const onTop = settings.onTop ?? true
-
   state.mainWindow = new BrowserWindow({
     width: saved.width || DEFAULT_WINDOW.width,
     height: saved.height || DEFAULT_WINDOW.height,
@@ -208,7 +208,6 @@ function createWindow() {
     y: saved.y,
     frame: false,
     transparent: true,
-    alwaysOnTop: onTop,
     resizable: true,
     skipTaskbar: false,
     hasShadow: false,
@@ -218,8 +217,6 @@ function createWindow() {
       nodeIntegration: false
     }
   })
-
-  state.mainWindow.setAlwaysOnTop(onTop, onTop ? 'screen-saver' : 'normal')
   state.mainWindow.on('moved', saveWindowState)
   state.mainWindow.on('resized', saveWindowState)
 
@@ -355,10 +352,18 @@ function setupIPC() {
 
   const keyPath = path.join(app.getPath('userData'), '.api-key')
 
-  const _modelOpts = () => ({
-    ...(state.claudeModel && { model: state.claudeModel }),
-    ...(state.claudeQualityModel && { qualityModel: state.claudeQualityModel }),
-  })
+  const _modelOpts = (providerType) => {
+    if (providerType === 'gemini') {
+      return {
+        ...(state.geminiModel && { model: state.geminiModel }),
+        ...(state.geminiQualityModel && { qualityModel: state.geminiQualityModel }),
+      }
+    }
+    return {
+      ...(state.claudeModel && { model: state.claudeModel }),
+      ...(state.claudeQualityModel && { qualityModel: state.claudeQualityModel }),
+    }
+  }
 
   ipcMain.handle('apikey:get', () => {
     try { return fs.readFileSync(keyPath, 'utf-8') } catch { return '' }
@@ -384,10 +389,31 @@ function setupIPC() {
     return { success: true, model: provider.defaultModel || 'auto' }
   })
 
-  ipcMain.handle('provider:set-anthropic', async (_, key) => {
-    fs.writeFileSync(keyPath, key, 'utf-8')
-    state.aiClient = new AiClient(key, _modelOpts())
+  ipcMain.handle('provider:set-anthropic', async () => {
+    const env = loadEnv()
+    const key = env.ANTHROPIC_API_KEY
+    if (!key) {
+      return { success: false, error: 'ANTHROPIC_API_KEY が .env に見つかりません' }
+    }
+    const provider = new AnthropicProvider(key)
+    const ok = await provider.validate()
+    if (!ok) return { success: false, error: 'Anthropic API 接続に失敗しました' }
+    state.aiClient = new AiClient(provider, _modelOpts())
     saveSetting('provider', { type: 'anthropic' })
+    return { success: true }
+  })
+
+  ipcMain.handle('provider:set-gemini', async () => {
+    const env = loadEnv()
+    const key = env.GEMINI_API_KEY
+    if (!key) {
+      return { success: false, error: 'GEMINI_API_KEY が .env に見つかりません' }
+    }
+    const provider = new GeminiProvider(key)
+    const ok = await provider.validate()
+    if (!ok) return { success: false, error: 'Gemini API 接続に失敗しました' }
+    state.aiClient = new AiClient(provider, _modelOpts('gemini'))
+    saveSetting('provider', { type: 'gemini' })
     return { success: true }
   })
 
@@ -491,12 +517,6 @@ function setupIPC() {
   ipcMain.handle('polling:stop', () => stopPolling())
   ipcMain.handle('ai:toggle', (_, enabled) => { state.aiEnabled = enabled; saveSetting('aiEnabled', enabled); return state.aiEnabled })
   ipcMain.handle('ai:status', () => state.aiEnabled)
-  ipcMain.handle('ontop:toggle', (_, enabled) => {
-    state.mainWindow?.setAlwaysOnTop(enabled, enabled ? 'screen-saver' : 'normal')
-    saveSetting('onTop', enabled)
-    return enabled
-  })
-  ipcMain.handle('ontop:status', () => state.mainWindow?.isAlwaysOnTop() ?? true)
 
   ipcMain.handle('ai:logs', () => state.aiClient?.getLogs() || [])
   ipcMain.handle('ai:clearLogs', () => { state.aiClient?.clearLogs(); return true })
@@ -1653,20 +1673,26 @@ if (!gotTheLock) {
     createWindow()
     setupIPC()
 
-    // .env からモデル設定を読み込み
+    // .env からモデル設定を読み込み（プロバイダー別、ログは復元後に出力）
     const env = loadEnv()
-    if (env.CLAUDE_MODEL) {
-      state.claudeModel = env.CLAUDE_MODEL
-      console.log(`[Config] CLAUDE_MODEL=${state.claudeModel}`)
+    if (env.CLAUDE_MODEL) state.claudeModel = env.CLAUDE_MODEL
+    if (env.CLAUDE_QUALITY_MODEL) state.claudeQualityModel = env.CLAUDE_QUALITY_MODEL
+    if (env.GEMINI_MODEL) state.geminiModel = env.GEMINI_MODEL
+    if (env.GEMINI_QUALITY_MODEL) state.geminiQualityModel = env.GEMINI_QUALITY_MODEL
+
+    const _restoreModelOpts = (providerType) => {
+      if (providerType === 'gemini') {
+        return {
+          ...(state.geminiModel && { model: state.geminiModel }),
+          ...(state.geminiQualityModel && { qualityModel: state.geminiQualityModel }),
+        }
+      }
+      return {
+        ...(state.claudeModel && { model: state.claudeModel }),
+        ...(state.claudeQualityModel && { qualityModel: state.claudeQualityModel }),
+      }
     }
-    if (env.CLAUDE_QUALITY_MODEL) {
-      state.claudeQualityModel = env.CLAUDE_QUALITY_MODEL
-      console.log(`[Config] CLAUDE_QUALITY_MODEL=${state.claudeQualityModel}`)
-    }
-    const aiOpts = {
-      ...(state.claudeModel && { model: state.claudeModel }),
-      ...(state.claudeQualityModel && { qualityModel: state.claudeQualityModel }),
-    }
+    const aiOpts = _restoreModelOpts()
 
     // プロバイダー復元 (Ollama or Anthropic)
     const savedProvider = loadSettings().provider
@@ -1688,17 +1714,26 @@ if (!gotTheLock) {
         }
       }).catch(() => {})
     } else if (savedProvider?.type === 'anthropic') {
-      // Anthropicプロバイダーが明示的に設定されている場合のみ
-      const keyPath = path.join(app.getPath('userData'), '.api-key')
-      try {
-        const key = fs.readFileSync(keyPath, 'utf-8')
-        if (key && key.startsWith('sk-ant-')) {
-          state.aiClient = new AiClient(key, aiOpts)
-          console.log('[Provider] Restored Anthropic')
-        } else {
-          console.log('[Provider] No valid Anthropic key found')
-        }
-      } catch {}
+      // Anthropicプロバイダー: .env の ANTHROPIC_API_KEY を使用
+      const key = env.ANTHROPIC_API_KEY
+      if (key) {
+        state.aiClient = new AiClient(new AnthropicProvider(key), aiOpts)
+        console.log('[Provider] Restored Anthropic from .env')
+        if (state.claudeModel) console.log(`[Config] model=${state.claudeModel}`)
+        if (state.claudeQualityModel) console.log(`[Config] qualityModel=${state.claudeQualityModel}`)
+      } else {
+        console.log('[Provider] No ANTHROPIC_API_KEY in .env')
+      }
+    } else if (savedProvider?.type === 'gemini') {
+      const key = env.GEMINI_API_KEY
+      if (key) {
+        state.aiClient = new AiClient(new GeminiProvider(key), _restoreModelOpts('gemini'))
+        console.log('[Provider] Restored Gemini from .env')
+        if (state.geminiModel) console.log(`[Config] model=${state.geminiModel}`)
+        if (state.geminiQualityModel) console.log(`[Config] qualityModel=${state.geminiQualityModel}`)
+      } else {
+        console.log('[Provider] No GEMINI_API_KEY in .env')
+      }
     } else {
       // プロバイダー未設定 → Ollamaが起動していれば自動接続
       console.log('[Provider] No provider configured. Trying auto-detect Ollama...')
@@ -1714,15 +1749,12 @@ if (!gotTheLock) {
           saveSetting('provider', { type: 'ollama', baseUrl: autoProvider.baseUrl, model: modelName })
           console.log(`[Provider] Auto-detected Ollama (model: ${modelName})`)
         } else {
-          // Ollamaも無い → 古いAPIキーを試す
-          const keyPath = path.join(app.getPath('userData'), '.api-key')
-          try {
-            const key = fs.readFileSync(keyPath, 'utf-8')
-            if (key && key.startsWith('sk-ant-')) {
-              state.aiClient = new AiClient(key, aiOpts)
-              console.log('[Provider] Fallback to Anthropic key')
-            }
-          } catch {}
+          // Ollamaも無い → .env の ANTHROPIC_API_KEY を試す
+          const anthropicKey = env.ANTHROPIC_API_KEY
+          if (anthropicKey) {
+            state.aiClient = new AiClient(new AnthropicProvider(anthropicKey), aiOpts)
+            console.log('[Provider] Fallback to Anthropic from .env')
+          }
           if (!state.aiClient) {
             console.log('[Provider] No provider available. Use Settings to set up Ollama.')
           }

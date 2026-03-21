@@ -16,7 +16,10 @@ const {
 const { buildKnowledgeContext } = require('../core/knowledgeDb')
 const { AnthropicProvider } = require('./providers/anthropicProvider')
 
-const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
+const DEFAULT_MODELS = {
+  gemini: 'gemini-2.5-flash',
+  default: 'claude-haiku-4-5-20251001',
+}
 
 class AiClient {
   /**
@@ -32,8 +35,9 @@ class AiClient {
     } else {
       this.provider = providerOrApiKey
     }
-    this.model = opts.model || DEFAULT_MODEL
-    this.qualityModel = opts.qualityModel || DEFAULT_MODEL
+    const defaultModel = DEFAULT_MODELS[this.provider?.type] || DEFAULT_MODELS.default
+    this.model = opts.model || defaultModel
+    this.qualityModel = opts.qualityModel || defaultModel
     this.coreBuild = null
     this.substituteItems = []
     this.matchContext = null

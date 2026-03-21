@@ -176,6 +176,13 @@ export function BuildPanel({
         )}
       </div>
 
+      {/* 15分未満の注記 */}
+      {!showAiSection && hasSubstitutes && (
+        <div className="px-3 pb-2">
+          <p className="text-[10px] text-lol-text/40">15分以降にAIが状況判断を開始します</p>
+        </div>
+      )}
+
       {/* ===== AI状況判断セクション ===== */}
       {showAiSection && (
         <div className="border-t border-lol-gold/15">

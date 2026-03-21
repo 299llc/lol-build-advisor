@@ -1,98 +1,82 @@
 import { useState } from 'react'
-import { Swords, ChevronDown, ChevronUp, AlertTriangle, Zap, Crosshair, CheckCircle, Loader2 } from 'lucide-react'
+import { Swords, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 
 export function MatchupTip({ tip, loading, laningOver = false }) {
   const [manualToggle, setManualToggle] = useState(null)
   const expanded = manualToggle !== null ? manualToggle : !laningOver
 
-  // tipもloadingもなければ何も出さない
   if (!tip && !loading) return null
 
   const opponent = tip?.opponent || (typeof loading === 'object' ? loading.opponent : null)
 
   return (
-    <div className="rounded bg-lol-surface-light/50 border border-lol-blue/30 overflow-hidden">
+    <div style={{ border: '1px solid rgba(10,200,185,0.3)', borderRadius: 6, background: 'rgba(10,20,40,0.5)', flexShrink: 0 }}>
       {/* ヘッダー */}
       <button
         onClick={() => tip && setManualToggle(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-lol-surface-light/30 transition-colors"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'transparent', border: 'none', cursor: 'pointer' }}
       >
-        <div className="flex items-center gap-2">
-          <Swords size={14} className="text-lol-blue shrink-0" />
-          <span className="font-heading text-xs text-lol-blue tracking-wider">
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Swords size={14} style={{ color: '#0AC8B9', flexShrink: 0 }} />
+          <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#0AC8B9', letterSpacing: '0.1em' }}>
             {opponent ? `VS ${opponent.toUpperCase()}` : 'MATCHUP'}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {loading && <Loader2 size={14} className="text-lol-blue animate-spin shrink-0" />}
-          {tip && (
-            expanded
-              ? <ChevronUp size={12} className="text-lol-text-dim shrink-0" />
-              : <ChevronDown size={12} className="text-lol-text-dim shrink-0" />
-          )}
-        </div>
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {loading && <Loader2 size={14} style={{ color: '#0AC8B9', animation: 'spin 1s linear infinite' }} />}
+          {tip && (expanded ? <ChevronUp size={12} style={{ color: '#888' }} /> : <ChevronDown size={12} style={{ color: '#888' }} />)}
+        </span>
       </button>
 
       {/* コンテンツ */}
-      {tip && expanded ? (
-        <div className="px-3 pb-2 flex flex-col gap-1.5">
+      {tip && expanded && (
+        <div style={{ padding: '0 12px 10px', fontSize: 12, lineHeight: 1.6, color: '#ccc', userSelect: 'text', cursor: 'text', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
           {/* Summary */}
-          {tip.summary && (
-            <p className="text-xs text-lol-text-light leading-snug">{tip.summary}</p>
-          )}
+          {tip.summary && <p style={{ margin: '0 0 6px' }}>{tip.summary}</p>}
 
-          {/* Tips — やるべきこと */}
+          {/* Tips */}
           {tip.tips?.length > 0 && (
-            <div>
-              <div className="flex items-center gap-1 mb-0.5">
-                <CheckCircle size={11} className="text-lol-blue shrink-0" />
-                <span className="text-[10px] font-bold text-lol-blue">やるべきこと</span>
-              </div>
-              <ul className="flex flex-col gap-0.5 pl-0.5">
-                {tip.tips.map((t, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-xs text-lol-text-light">
-                    <span className="text-lol-blue shrink-0 mt-0.5">-</span>
-                    <span>{t}</span>
-                  </li>
-                ))}
-              </ul>
+            <div style={{ marginBottom: 6 }}>
+              <p style={{ fontSize: 10, fontWeight: 'bold', color: '#0AC8B9', margin: '0 0 2px' }}>やるべきこと</p>
+              {tip.tips.map((t, i) => (
+                <p key={i} style={{ margin: '0 0 3px', paddingLeft: 8 }}>
+                  <span style={{ color: '#0AC8B9' }}>- </span>{t}
+                </p>
+              ))}
             </div>
           )}
 
-          {/* Playstyle / 勝ち筋 */}
+          {/* Playstyle */}
           {tip.playstyle && (
-            <div>
-              <div className="flex items-center gap-1 mb-0.5">
-                <Crosshair size={11} className="text-lol-blue shrink-0" />
-                <span className="text-[10px] font-bold text-lol-blue">勝ち筋</span>
-              </div>
-              <div className="text-xs text-lol-text-light px-1.5 py-1 rounded bg-lol-blue/8 border border-lol-blue/15">
+            <div style={{ marginBottom: 6 }}>
+              <p style={{ fontSize: 10, fontWeight: 'bold', color: '#0AC8B9', margin: '0 0 2px' }}>勝ち筋</p>
+              <p style={{ margin: 0, padding: '4px 6px', borderRadius: 4, background: 'rgba(10,200,185,0.08)', border: '1px solid rgba(10,200,185,0.15)' }}>
                 {tip.playstyle}
-              </div>
+              </p>
             </div>
           )}
 
-          {/* Danger — 警戒すること */}
+          {/* Danger */}
           {tip.danger && (
-            <div className="flex items-start gap-1.5 text-xs">
-              <AlertTriangle size={11} className="text-lol-red shrink-0 mt-0.5" />
-              <span className="text-lol-red/90"><span className="font-bold">警戒</span> {tip.danger}</span>
-            </div>
+            <p style={{ margin: '0 0 4px', color: 'rgba(232,64,87,0.9)' }}>
+              <span style={{ fontWeight: 'bold' }}>⚠ 警戒</span> {tip.danger}
+            </p>
           )}
 
-          {/* Power Spike — パワースパイク */}
+          {/* Power Spike */}
           {tip.power_spike && (
-            <div className="flex items-start gap-1.5 text-xs">
-              <Zap size={11} className="text-lol-gold shrink-0 mt-0.5" />
-              <span className="text-lol-gold/90"><span className="font-bold">パワースパイク</span> {tip.power_spike}</span>
-            </div>
+            <p style={{ margin: 0, color: 'rgba(200,170,110,0.9)' }}>
+              <span style={{ fontWeight: 'bold' }}>⚡ パワースパイク</span> {tip.power_spike}
+            </p>
           )}
         </div>
-      ) : !tip && loading ? (
-        <div className="p-3 text-center">
-          <p className="text-xs text-lol-text">マッチアップを分析中...</p>
+      )}
+
+      {!tip && loading && (
+        <div style={{ padding: 12, textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: '#888', margin: 0 }}>マッチアップを分析中...</p>
         </div>
-      ) : null}
+      )}
     </div>
   )
 }
