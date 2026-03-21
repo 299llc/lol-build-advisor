@@ -6,13 +6,13 @@ class DiffDetector {
   constructor() {
     this.lastData = null
     this.lastCallTime = 0
-    this.debounceMs = 10000 // 10秒デバウンス
+    this.debounceMs = 90000 // 90秒デバウンス
   }
 
   check(gameData) {
     const now = Date.now()
 
-    // デバウンス: 前回呼び出しから10秒以内はスキップ
+    // デバウンス: 前回呼び出しから90秒以内はスキップ
     if (now - this.lastCallTime < this.debounceMs) return false
 
     if (!this.lastData) {
