@@ -38,13 +38,14 @@ class GeminiProvider {
       generationConfig.responseMimeType = 'application/json'
     }
 
-    const body = {
-      contents,
-      generationConfig,
-    }
+    // 暗黙的キャッシュ: systemInstruction(固定)を先頭に配置し、
+    // contents(動的)を末尾にすることでプレフィックス一致率を高める
+    const body = {}
     if (systemText) {
       body.systemInstruction = { parts: [{ text: systemText }] }
     }
+    body.generationConfig = generationConfig
+    body.contents = contents
 
     const res = await fetch(url, {
       method: 'POST',

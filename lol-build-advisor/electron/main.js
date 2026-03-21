@@ -23,6 +23,18 @@ const { GameLogger } = require('./core/gameLogger')
 const { Preprocessor } = require('./core/preprocessor')
 const { Postprocessor } = require('./core/postprocessor')
 
+// ── Ollama サービス停止（ローカル以外に切替時） ──
+const _stopOllamaIfRunning = async () => {
+  try {
+    const setup = new OllamaSetup(app.getPath('userData'))
+    const status = await setup.checkStatus()
+    if (status.running) {
+      require('child_process').exec('taskkill /IM ollama.exe /F', { timeout: 5000 }, () => {})
+      console.log('[OllamaSetup] Stopped Ollama service (switched to non-local provider)')
+    }
+  } catch {}
+}
+
 // ── .env 読み込み ────────────────────────────────
 function loadEnv() {
   try {
@@ -407,6 +419,7 @@ function setupIPC() {
     if (!ok) return { success: false, error: 'Anthropic API 接続に失敗しました' }
     state.aiClient = new AiClient(provider, _modelOpts())
     saveSetting('provider', { type: 'anthropic' })
+    _stopOllamaIfRunning()
     return { success: true }
   })
 
@@ -421,6 +434,7 @@ function setupIPC() {
     if (!ok) return { success: false, error: 'Gemini API 接続に失敗しました' }
     state.aiClient = new AiClient(provider, _modelOpts('gemini'))
     saveSetting('provider', { type: 'gemini' })
+    _stopOllamaIfRunning()
     return { success: true }
   })
 
@@ -438,6 +452,7 @@ function setupIPC() {
     if (!ok) return { success: false, error: 'Bedrock 接続に失敗しました' }
     state.aiClient = new AiClient(provider, _modelOpts())
     saveSetting('provider', { type: 'bedrock', region })
+    _stopOllamaIfRunning()
     return { success: true }
   })
 
@@ -1734,6 +1749,7 @@ if (!gotTheLock) {
         }
       }).catch(() => {})
     } else if (savedProvider?.type === 'anthropic') {
+      _stopOllamaIfRunning()
       // Anthropicプロバイダー: .env の ANTHROPIC_API_KEY を使用
       const key = env.ANTHROPIC_API_KEY
       if (key) {
@@ -1745,6 +1761,7 @@ if (!gotTheLock) {
         console.log('[Provider] No ANTHROPIC_API_KEY in .env')
       }
     } else if (savedProvider?.type === 'gemini') {
+      _stopOllamaIfRunning()
       const key = env.GEMINI_API_KEY
       if (key) {
         state.aiClient = new AiClient(new GeminiProvider(key), _restoreModelOpts('gemini'))

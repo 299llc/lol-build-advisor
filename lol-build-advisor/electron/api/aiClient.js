@@ -381,10 +381,15 @@ class AiClient {
         logPrefix: 'macro', timeoutMs: 60000
       })
     } else {
+      // staticContext は毎tick変わるためsystemではなくuserメッセージに含める
+      // （systemを安定させてGemini暗黙的キャッシュのプレフィックス一致率を高める）
+      const userContent = staticContext
+        ? `${staticContext}\n\n${dynamicContent}`
+        : dynamicContent
       result = await this._callApi({
         model: this.model, maxTokens: 500, temperature: 0,
-        system: this._buildSystem(MACRO_PROMPT, staticContext),
-        messages: [{ role: 'user', content: dynamicContent }],
+        system: this._buildSystem(MACRO_PROMPT),
+        messages: [{ role: 'user', content: userContent }],
         timeoutMs: 20000, logType: 'macro'
       })
     }
