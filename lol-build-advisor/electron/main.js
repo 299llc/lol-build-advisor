@@ -94,6 +94,8 @@ const state = {
   lastMacroTime: 0,
   macroPending: false,
   lastObjectiveCount: 0,
+  lastTurretCount: 0,
+  _lastMacroFingerprint: null,
 
   // 最後に送信したデータ（コンパクトウィンドウ再送用）
   lastMacroAdvice: null,
@@ -653,6 +655,17 @@ async function requestMacroAdvice(gameData, me, allies, enemies) {
 
     // 前処理: 構造化入力を生成
     const structuredInput = state.preprocessor.buildMacroInput(gameState, events)
+
+    // 状況未変化ならスキップ（コスト削減）
+    const macroFingerprint = `${structuredInput.game_phase}|${structuredInput.situation}|${structuredInput.kill_diff}|${structuredInput.action_candidates.map(c => c.action).join(',')}|${JSON.stringify(structuredInput.objectives)}|${JSON.stringify(structuredInput.towers)}`
+    if (macroFingerprint === state._lastMacroFingerprint) {
+      macroLog(`Skipped: situation unchanged`)
+      state.macroPending = false
+      broadcast('macro:loading', false)
+      return
+    }
+    state._lastMacroFingerprint = macroFingerprint
+
     console.log(`[Pipeline] Macro input: phase=${structuredInput.game_phase} situation=${structuredInput.situation} actions=${structuredInput.action_candidates.map(c => c.action).join(',')}`)
 
     // staticContextはcache_control用に引き続き使う
@@ -1574,8 +1587,10 @@ function handleMacroAdvice(gameData, me, allies, enemies) {
   // オブジェクトキルイベント数(APIが返さない場合は0のまま → 時間ベーストリガーのみ)
   const objEvents = classifyObjectiveEvents(events)
   const objectiveCount = objEvents.dragon.length + objEvents.baron.length + objEvents.herald.length + objEvents.voidgrub.length
-  const objectiveTaken = objectiveCount > state.lastObjectiveCount
-  if (objectiveTaken) state.lastObjectiveCount = objectiveCount
+  const turretCount = events.filter(e => e.EventName === 'TurretKilled').length
+  const objectiveTaken = objectiveCount > state.lastObjectiveCount || turretCount > (state.lastTurretCount || 0)
+  if (objectiveCount > state.lastObjectiveCount) state.lastObjectiveCount = objectiveCount
+  if (turretCount > (state.lastTurretCount || 0)) state.lastTurretCount = turretCount
 
   const timeSinceLastMacro = now - state.lastMacroTime
 
