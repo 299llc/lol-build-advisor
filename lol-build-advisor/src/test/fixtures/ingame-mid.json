@@ -182,6 +182,9 @@
     "warning": "ゼドのローム警戒",
     "gameTime": 1080
   },
+  "champSelectExtras": {
+    "skills": { "order": ["W", "Q", "E"], "pickRate": 0.52 }
+  },
   "objectivesStatus": {
     "dragon": "ドラゴン: 2体討伐 (スポーン済み・取得可能)",
     "baron": "バロン: スポーンまで2:00",

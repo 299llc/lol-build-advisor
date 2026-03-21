@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { X, Navigation, Loader2, AlertTriangle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Lock, Unlock, Navigation, Loader2, AlertTriangle } from 'lucide-react'
 
 function formatGameTime(seconds) {
   if (seconds == null || seconds <= 0) return null
@@ -8,23 +8,37 @@ function formatGameTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-// ドラッグハンドル + 閉じるボタンのみ（極小）
-function CompactTitleBar({ status }) {
+// ドラッグハンドル + ロック/閉じるボタン
+function CompactTitleBar({ status, locked, onToggleLock }) {
   return (
-    <div className="drag-region flex items-center justify-between px-3 py-1">
+    <div className={`flex items-center justify-between px-3 py-1 ${locked ? '' : 'drag-region'}`}>
       <div className={`w-2 h-2 rounded-full ${status === 'ingame' ? 'bg-lol-blue' : status === 'ended' ? 'bg-lol-red' : 'bg-lol-gold animate-pulse'}`} />
-      <button
-        onClick={() => window.electronAPI?.compactClose()}
-        className="no-drag p-0.5 rounded text-white/30 hover:text-lol-red hover:bg-white/10 transition-colors"
-      >
-        <X size={10} />
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          onMouseEnter={() => locked && window.electronAPI?.compactSetPassthrough?.(false)}
+          onMouseLeave={() => locked && window.electronAPI?.compactSetPassthrough?.(true)}
+          onClick={onToggleLock}
+          className={`no-drag p-0.5 rounded transition-colors ${locked ? 'text-lol-blue' : 'text-white/30 hover:text-white/60'}`}
+          title={locked ? 'ロック解除（移動/リサイズ可）' : 'ロック（クリックスルー）'}
+          style={{ pointerEvents: 'auto' }}
+        >
+          {locked ? <Lock size={10} /> : <Unlock size={10} />}
+        </button>
+        {!locked && (
+          <button
+            onClick={() => window.electronAPI?.compactClose()}
+            className="no-drag p-0.5 rounded text-white/30 hover:text-lol-red hover:bg-white/10 transition-colors"
+          >
+            <X size={10} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
 // コアビルド + AI提案（アイコンのみ統合表示）
-function CompactItems({ coreBuild, suggestion, substituteItems, ownedItemIds, ddragon }) {
+function CompactItems({ coreBuild, suggestion, substituteItems, ownedItemIds, ddragon, skillOrder }) {
   // コアビルドアイテム
   const coreNames = coreBuild?.build_goal_names || []
   const coreImages = coreBuild?.build_goal_images || []
@@ -45,7 +59,8 @@ function CompactItems({ coreBuild, suggestion, substituteItems, ownedItemIds, dd
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {/* コアビルド */}
+      {/* コアビルド + AI提案 (左寄せ) */}
+      <div className="flex items-center gap-1 flex-wrap flex-1">
       {coreNames.map((item, i) => {
         const imgUrl = ddragon && coreImages[i] ? `${ddragon}/img/item/${coreImages[i]}` : null
         const isOwned = ownedItemIds?.has(String(coreIds[i]))
@@ -87,6 +102,20 @@ function CompactItems({ coreBuild, suggestion, substituteItems, ownedItemIds, dd
           </div>
         )
       })}
+      </div>
+      {/* スキルオーダー (右寄せ) */}
+      {skillOrder?.length > 0 && (
+        <div className="flex items-center gap-0.5 shrink-0">
+          {skillOrder.map((skill, i) => (
+            <span key={i} className={`text-[8px] font-bold px-1 py-0.5 rounded ${
+              skill === 'Q' ? 'bg-blue-500/30 text-blue-400' :
+              skill === 'W' ? 'bg-green-500/30 text-green-400' :
+              skill === 'E' ? 'bg-yellow-500/30 text-yellow-400' :
+              'bg-red-500/30 text-red-400'
+            }`}>{skill}</span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -167,6 +196,7 @@ function CompactMatchup({ tip }) {
 }
 
 export function CompactView({ status, gameData, coreBuild, aiSuggestion, aiLoading, substituteItems, macroAdvice, macroLoading, champSelectExtras, matchupTip, embedded = false }) {
+  const [locked, setLocked] = useState(true)
   const ddragon = gameData?.ddragon
   const me = gameData?.players?.me
   const ownedItemIds = new Set((me?.items || []).map(i => String(i.itemID)))
@@ -175,14 +205,26 @@ export function CompactView({ status, gameData, coreBuild, aiSuggestion, aiLoadi
 
   // Electron専用: body/html の背景を透明にしてウィンドウ透過を有効にする
   useEffect(() => {
-    if (embedded) return // ブラウザプレビュー時は変更しない
+    if (embedded) return
     document.documentElement.style.background = 'transparent'
     document.body.style.background = 'transparent'
   }, [embedded])
 
+  const toggleLock = () => {
+    const next = !locked
+    setLocked(next)
+    if (next) {
+      // ロック: クリックスルー有効
+      window.electronAPI?.compactSetPassthrough?.(true)
+    } else {
+      // アンロック: 通常操作
+      window.electronAPI?.compactSetPassthrough?.(false)
+    }
+  }
+
   return (
-    <div className={`${embedded ? 'h-full' : 'h-screen'} flex flex-col overflow-hidden rounded-lg`} style={{ background: 'rgba(1, 10, 19, 0.75)' }}>
-      {!embedded && <CompactTitleBar status={status} />}
+    <div className={`${embedded ? 'h-full' : 'h-screen'} flex flex-col overflow-hidden rounded-lg`} style={{ background: 'rgba(1, 10, 19, 0.75)', pointerEvents: (!embedded && locked) ? 'none' : undefined }}>
+      {!embedded && <CompactTitleBar status={status} locked={locked} onToggleLock={toggleLock} />}
 
       <div className="flex-1 overflow-y-auto px-3 pt-2 pb-2 space-y-2.5">
         {isIngame ? (
@@ -193,6 +235,7 @@ export function CompactView({ status, gameData, coreBuild, aiSuggestion, aiLoadi
               substituteItems={substituteItems}
               ownedItemIds={ownedItemIds}
               ddragon={ddragon}
+              skillOrder={champSelectExtras?.skills?.order}
             />
             <CompactMacro advice={macroAdvice} loading={macroLoading} />
           </>

@@ -142,6 +142,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('compact:status', handler)
   },
   compactClose: () => ipcRenderer.send('compact:close'),
+  compactSetPassthrough: (enabled) => ipcRenderer.send('compact:set-passthrough', enabled),
 
   // 前回試合結果
   getLastGame: () => ipcRenderer.invoke('lastgame:get'),

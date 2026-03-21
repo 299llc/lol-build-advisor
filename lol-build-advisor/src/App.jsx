@@ -80,6 +80,7 @@ export default function App() {
             macroLoading={macroLoading}
             objectivesStatus={objectivesStatus}
             ruleAlerts={ruleAlerts}
+            skillOrder={champSelectExtras?.skills?.order}
           />
         ) : status === 'champselect' ? (
           <ChampSelectScreen suggestion={coreBuild} aiLoading={aiLoading} ddragon={gameData?.ddragon || champSelectExtras?.ddragon} team={champSelectTeam} extras={champSelectExtras} />

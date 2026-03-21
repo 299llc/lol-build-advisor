@@ -247,6 +247,7 @@ function toggleCompactWindow() {
     frame: false,
     transparent: true,
     alwaysOnTop: true,
+    focusable: false,
     resizable: true,
     skipTaskbar: false,
     hasShadow: false,
@@ -274,9 +275,10 @@ function toggleCompactWindow() {
     state.mainWindow?.webContents.send('compact:status', false)
   })
 
-  // 読み込み完了後に既存データを再送
+  // 読み込み完了後に既存データを再送 + クリックスルー有効化
   state.compactWindow.webContents.on('did-finish-load', () => {
     sendStateToCompactWindow()
+    state.compactWindow?.setIgnoreMouseEvents(true, { forward: true })
   })
 
   if (state.isDev) {
@@ -307,6 +309,7 @@ function broadcast(channel, data) {
   else if (channel === 'substitute:items') state.lastSubstituteItems = data
   else if (channel === 'core:build') state.lastCoreBuildMsg = data
   else if (channel === 'game:status') state.lastGameStatus = data
+  else if (channel === 'champselect:extras') state.lastChampSelectExtras = data
 
   state.mainWindow?.webContents.send(channel, data)
   state.compactWindow?.webContents.send(channel, data)
@@ -323,6 +326,7 @@ function sendStateToCompactWindow() {
   if (state.lastSubstituteItems) cw.webContents.send('substitute:items', state.lastSubstituteItems)
   if (state.lastMatchupTip) cw.webContents.send('matchup:tip', state.lastMatchupTip)
   if (state.lastMacroAdvice) cw.webContents.send('macro:advice', state.lastMacroAdvice)
+  if (state.lastChampSelectExtras) cw.webContents.send('champselect:extras', state.lastChampSelectExtras)
 }
 
 // ── デバッグログ ──────────────────────────────────
@@ -349,6 +353,9 @@ function setupIPC() {
   ipcMain.handle('compact:status', () => !!state.compactWindow)
   ipcMain.on('compact:minimize', () => state.compactWindow?.minimize())
   ipcMain.on('compact:close', () => state.compactWindow?.close())
+  ipcMain.on('compact:set-passthrough', (_, enabled) => {
+    state.compactWindow?.setIgnoreMouseEvents(enabled, { forward: true })
+  })
 
   const keyPath = path.join(app.getPath('userData'), '.api-key')
 
@@ -1416,7 +1423,11 @@ function handleCoreBuild(me, resolvedPosition) {
   if (!state.coreBuildLoaded && me.enName && resolvedPosition) {
     state.coreBuildLoaded = true
     console.log(`[CoreBuild] Loading for ${me.enName} ${resolvedPosition}...`)
-    loadCoreBuild(me.enName, resolvedPosition).catch(err => {
+    loadCoreBuild(me.enName, resolvedPosition).then(analysis => {
+      if (analysis?.skills) {
+        broadcast('champselect:extras', { skills: analysis.skills, ddragon: state.ddragonBase })
+      }
+    }).catch(err => {
       console.error(`[CoreBuild] Failed: ${err.message}`)
       state.coreBuildLoaded = false
     })
