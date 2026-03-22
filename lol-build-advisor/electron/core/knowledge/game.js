@@ -876,11 +876,99 @@ const SECTION_LABELS = {
  * LLMのシステムプロンプトに渡すための全量テキスト。
  * MACRO_TEXTBOOK + ROLE_KNOWLEDGE から自動生成。
  */
-function buildFullGameKnowledgeText() {
-  const lines = ['【League of Legends ゲーム知識】']
+// ── RAG: アクション→関連知識セクションのマッピング ──
+const ACTION_KNOWLEDGE_MAP = {
+  dragon_secure:  ['dragonElements', 'objectivePriority', 'fightOrFlight', 'visionControl'],
+  dragon_prep:    ['dragonElements', 'objectivePriority', 'objectivePrep', 'visionControl'],
+  baron_secure:   ['objectivePriority', 'fightOrFlight', 'deathTimerAbuse', 'baronBait'],
+  baron_prep:     ['objectivePriority', 'objectivePrep', 'baronBait', 'visionControl'],
+  elder_prep:     ['elderDragon', 'objectivePriority', 'objectivePrep'],
+  elder_secure:   ['elderDragon', 'objectivePriority', 'fightOrFlight'],
+  farm:           ['waveManagement', 'resetOptimization'],
+  recall:         ['resetOptimization', 'recallTiming'],
+  ward:           ['visionControl', 'lateVision'],
+  push_tower:     ['closingOutGames', 'inhibitorPriority', 'deathTimerAbuse'],
+  split_push:     ['splitPush', 'crossMapPlay', 'teleportUsage'],
+  invade:         ['counterJungling', 'jungleTracking'],
+  teamfight:      ['teamfighting', 'teamfightByRole', 'fightOrFlight'],
+  engage:         ['teamfighting', 'ultimateManagement', 'fightOrFlight'],
+  roam:           ['roaming', 'waveManagement'],
+  play_safe:      ['playingFromBehind', 'comebackGoldMechanics'],
+}
 
-  // MACRO_TEXTBOOK 全セクション
-  for (const [key, value] of Object.entries(MACRO_TEXTBOOK)) {
+// フェーズ→基本知識のマッピング
+const PHASE_BASE_SECTIONS = {
+  early: ['gameBasics', 'earlyWaveManagement', 'earlyVision', 'laneTrading'],
+  mid:   ['gameBasics', 'midGameTransition', 'tempoAndInitiative', 'lateVision'],
+  late:  ['gameBasics', 'elderDragon', 'baseRaceDecision', 'deathTimerAbuse'],
+}
+
+// アイテム判断用の最小知識セット
+const ITEM_KNOWLEDGE_SECTIONS = [
+  'gameBasics', 'itemCategories', 'grievousWounds', 'crowdControl', 'powerSpikes', 'goldXpAdvantage',
+  'recallTiming', 'winConditions', 'dragonElements',
+]
+
+// マッチアップ用の知識セット
+const LANING_KNOWLEDGE_SECTIONS = [
+  'crowdControl', 'laneTrading', 'earlyWaveManagement', 'tradingStance', 'tethering',
+  'abilityCooldownWindows', 'autoAttackSpacing', 'experienceDenial', 'fogOfWarUsage',
+  'powerSpikes', 'summonerSpellTracking',
+]
+
+/**
+ * RAG: アクション候補とフェーズから関連知識セクションだけ抽出
+ * @param {string[]} actions - action_candidates のaction値配列
+ * @param {string} phase - 'early'|'mid'|'late'
+ * @returns {string} 関連知識テキスト
+ */
+function buildMacroKnowledgeText(actions, phase) {
+  const sectionSet = new Set()
+
+  // フェーズ基本知識
+  const baseSections = PHASE_BASE_SECTIONS[phase] || PHASE_BASE_SECTIONS.mid
+  for (const s of baseSections) sectionSet.add(s)
+
+  // アクション候補から関連知識を追加
+  for (const action of actions) {
+    const sections = ACTION_KNOWLEDGE_MAP[action]
+    if (sections) {
+      for (const s of sections) sectionSet.add(s)
+    }
+  }
+
+  // 常に含める基本セクション
+  sectionSet.add('winConditions')
+  sectionSet.add('buffUsage')
+
+  return _buildKnowledgeText([...sectionSet], '【マクロ知識】')
+}
+
+/**
+ * アイテム判断用の最小知識テキスト
+ */
+let _itemKnowledgeCache = null
+function buildItemKnowledgeText() {
+  return _itemKnowledgeCache || (_itemKnowledgeCache = _buildKnowledgeText(ITEM_KNOWLEDGE_SECTIONS, '【アイテム知識】'))
+}
+
+/**
+ * マッチアップ/レーニング用の知識テキスト
+ */
+let _laningKnowledgeCache = null
+function buildLaningKnowledgeText() {
+  return _laningKnowledgeCache || (_laningKnowledgeCache = _buildKnowledgeText(LANING_KNOWLEDGE_SECTIONS, '【レーニング知識】'))
+}
+
+/**
+ * 指定セクションのみからテキストを構築（内部ヘルパー）
+ */
+function _buildKnowledgeText(sectionKeys, header) {
+  const lines = [header]
+
+  for (const key of sectionKeys) {
+    const value = MACRO_TEXTBOOK[key]
+    if (!value) continue
     const label = SECTION_LABELS[key] || key
     if (Array.isArray(value)) {
       lines.push(`\n■ ${label}`)
@@ -893,21 +981,29 @@ function buildFullGameKnowledgeText() {
     }
   }
 
-  // ロール別戦略
-  lines.push('\n\n【ロール別戦略】')
+  return lines.join('\n')
+}
+
+function buildFullGameKnowledgeText() {
+  const textbookText = _buildKnowledgeText(Object.keys(MACRO_TEXTBOOK), '【League of Legends ゲーム知識】')
+
+  // ロール別戦略を追加
+  const roleLines = ['\n\n【ロール別戦略】']
   for (const [role, info] of Object.entries(ROLE_KNOWLEDGE)) {
-    lines.push(`\n■ ${role}`)
-    lines.push(`優先事項: ${info.priorities.join('、')}`)
-    lines.push(`CS目安: ${info.csTarget}/分`)
-    lines.push(`序盤: ${info.earlyGame}`)
-    lines.push(`中盤: ${info.midGame}`)
-    lines.push(`終盤: ${info.lateGame}`)
+    roleLines.push(`\n■ ${role}`)
+    roleLines.push(`優先事項: ${info.priorities.join('、')}`)
+    roleLines.push(`CS目安: ${info.csTarget}/分`)
+    roleLines.push(`序盤: ${info.earlyGame}`)
+    roleLines.push(`中盤: ${info.midGame}`)
+    roleLines.push(`終盤: ${info.lateGame}`)
   }
 
-  return lines.join('\n')
+  return textbookText + roleLines.join('\n')
 }
 
 module.exports = {
   ROLE_KNOWLEDGE, CLASS_KNOWLEDGE, PHASE_KNOWLEDGE, MACRO_TEXTBOOK, TAG_TRAITS,
-  SECTION_LABELS, buildFullGameKnowledgeText
+  SECTION_LABELS, buildFullGameKnowledgeText,
+  buildMacroKnowledgeText, buildItemKnowledgeText, buildLaningKnowledgeText,
+  ACTION_KNOWLEDGE_MAP,
 }

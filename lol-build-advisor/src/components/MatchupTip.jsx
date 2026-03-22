@@ -8,6 +8,7 @@ export function MatchupTip({ tip, loading, laningOver = false }) {
   if (!tip && !loading) return null
 
   const opponent = tip?.opponent || (typeof loading === 'object' ? loading.opponent : null)
+  const opponentPartner = tip?.opponentPartner || (typeof loading === 'object' ? loading.opponentPartner : null)
 
   return (
     <div style={{ border: '1px solid rgba(10,200,185,0.3)', borderRadius: 6, background: 'rgba(10,20,40,0.5)', flexShrink: 0 }}>
@@ -19,7 +20,7 @@ export function MatchupTip({ tip, loading, laningOver = false }) {
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Swords size={14} style={{ color: '#0AC8B9', flexShrink: 0 }} />
           <span style={{ fontFamily: 'Orbitron, sans-serif', fontSize: 12, color: '#0AC8B9', letterSpacing: '0.1em' }}>
-            {opponent ? `VS ${opponent.toUpperCase()}` : 'MATCHUP'}
+            {opponent ? `VS ${opponent.toUpperCase()}${opponentPartner ? ` & ${opponentPartner.toUpperCase()}` : ''}` : 'MATCHUP'}
           </span>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

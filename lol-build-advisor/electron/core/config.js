@@ -9,6 +9,10 @@ module.exports = {
   // マクロアドバイス（設計書9.6: デバウンス30-60秒）
   MACRO_INTERVAL_MS: 90000,
   MACRO_DEBOUNCE_MS: 30000,
+  MACRO_FALLBACK_MS: 300000,
+
+  // ゴールド閾値（リコール判断トリガー）
+  RECALL_GOLD_THRESHOLDS: [875, 1100, 1300, 2000],
 
   // オブジェクトスポーンタイム (秒) — Season 2024/2025
   OBJECTIVES: {

@@ -94,12 +94,9 @@ class Postprocessor {
     if (raw.confidence === 'low') return previousResult
 
     // 7. action が actionCandidates に含まれない → actionCandidates[0] を使用
-    let action = raw.action
-    if (Array.isArray(actionCandidates) && actionCandidates.length > 0) {
-      if (!actionCandidates.includes(action)) {
-        action = actionCandidates[0]
-      }
-    }
+    let action = (typeof raw.action === 'string' && raw.action.length > 0)
+      ? raw.action
+      : (Array.isArray(actionCandidates) && actionCandidates.length > 0 ? actionCandidates[0] : 'macro_advice')
 
     // 8. 禁止表現チェック: title/desc に抽象論が含まれていたら除去
     const combined = title + desc

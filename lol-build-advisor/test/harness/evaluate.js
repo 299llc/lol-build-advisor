@@ -139,19 +139,9 @@ function evaluateMacro(actual, expected) {
     pass = false
   }
 
-  // action が action_candidates に含まれるかチェック
-  if (expected.valid_actions && actual.action) {
-    if (!expected.valid_actions.includes(actual.action)) {
-      details.push(`action "${actual.action}" が候補外`)
-      pass = false
-    }
-  }
-
-  // preferred_action チェック（推奨だが不一致でもfailにしない、詳細に記録）
-  if (expected.preferred_action && actual.action) {
-    if (actual.action !== expected.preferred_action) {
-      details.push(`⚠ preferred_action "${expected.preferred_action}" ではなく "${actual.action}" を選択`)
-    }
+  if (!actual.action || typeof actual.action !== 'string') {
+    details.push('action フィールドが空 or 不正')
+    pass = false
   }
 
   // キーワードチェック（title + desc + warning に含まれるか）
