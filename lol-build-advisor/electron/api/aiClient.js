@@ -7,7 +7,7 @@
  * プロバイダー抽象化: AnthropicProvider (BYOK) / BedrockProvider (AWS) / OllamaProvider (ローカルLLM) を切り替え可能
  */
 const { ITEM_PROMPT, MATCHUP_PROMPT, MACRO_PROMPT, COACHING_PROMPT } = require('../core/prompts')
-const { buildFullGameKnowledgeText } = require('../core/knowledge/game')
+const { buildFullGameKnowledgeText, buildMacroKnowledgeText, buildItemKnowledgeText, buildLaningKnowledgeText } = require('../core/knowledge/game')
 const {
   LOCAL_ITEM_STEP1_PROMPT, LOCAL_ITEM_STEP2_PROMPT,
   LOCAL_MATCHUP_STEP1_PROMPT, LOCAL_MATCHUP_STEP2_PROMPT,
@@ -20,6 +20,49 @@ const { AnthropicProvider } = require('./providers/anthropicProvider')
 const DEFAULT_MODELS = {
   gemini: 'gemini-2.5-flash',
   default: 'claude-haiku-4-5-20251001',
+}
+
+const GEMINI_MACRO_MODEL = 'gemini-2.5-flash-lite'
+
+const MACRO_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'desc', 'action'],
+  properties: {
+    title: { type: 'string' },
+    desc: { type: 'string' },
+    action: { type: 'string' },
+    warning: { type: 'string' },
+    confidence: {
+      type: 'string',
+      enum: ['low', 'medium', 'high']
+    }
+  }
+}
+
+const ITEM_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['recommended', 'reasoning', 'confidence'],
+  properties: {
+    recommended: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'reason'],
+        properties: {
+          id: { type: 'number' },
+          reason: { type: 'string' },
+        }
+      }
+    },
+    reasoning: { type: 'string' },
+    confidence: {
+      type: 'string',
+      enum: ['low', 'medium', 'high']
+    }
+  }
 }
 
 class AiClient {
@@ -56,6 +99,10 @@ class AiClient {
     this.lastMatchupTip = null
     this.lastMacroAdvice = null
     this.lastCoaching = null
+    this.interactions = {
+      build: { id: null, bootstrapped: false },
+      macro: { id: null, bootstrapped: false },
+    }
   }
 
   setCoreBuild(coreBuild) { this.coreBuild = coreBuild }
@@ -65,6 +112,14 @@ class AiClient {
   setPosition(position) { this.position = position }
   setGameTime(sec) { this.gameTimeSec = sec }
   setRank(rank) { this.rank = rank }
+  setInteractionSession(kind, session = {}) {
+    if (!this.interactions[kind]) this.interactions[kind] = { id: null, bootstrapped: false }
+    this.interactions[kind] = {
+      ...this.interactions[kind],
+      ...session,
+    }
+  }
+  getInteractionSession(kind) { return this.interactions[kind] || { id: null, bootstrapped: false } }
   getSubstituteItems() { return this.substituteItems }
   getLogs() { return this.logs }
   clearLogs() { this.logs = [] }
@@ -73,17 +128,31 @@ class AiClient {
 
   /**
    * Prompt Caching 用 system 配列を構築
-   * DOMAIN_KNOWLEDGE（不変） → taskPrompt → championKnowledge（試合中不変） → extraContext の順に配置し、
-   * 共通プレフィックスが Haiku 4.5 のキャッシュ閾値 (4096トークン) を超えるようにする
+   * knowledgeText → taskPrompt → championKnowledge → extraContext の順に配置し、
+   * 共通プレフィックスがキャッシュ閾値を超えるようにする
    * @param {string} taskPrompt - タスク固有のプロンプト
    * @param {string} [extraContext] - 追加の静的コンテキスト（チーム構成等、試合中不変）
+   * @param {string} [knowledgeOverride] - RAG用: タスク別知識テキスト（省略時はフル知識）
    */
-  _buildSystem(taskPrompt, extraContext) {
-    if (!this._gameKnowledgeText) {
-      this._gameKnowledgeText = buildFullGameKnowledgeText()
-    }
+  _buildSystemNoCache(taskPrompt, extraContext, knowledgeOverride) {
+    const knowledgeText = knowledgeOverride || (this._gameKnowledgeText || (this._gameKnowledgeText = buildFullGameKnowledgeText()))
     const blocks = [
-      { type: 'text', text: this._gameKnowledgeText, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: knowledgeText },
+      { type: 'text', text: taskPrompt },
+    ]
+    if (this.championKnowledge) {
+      blocks.push({ type: 'text', text: this.championKnowledge })
+    }
+    if (extraContext) {
+      blocks.push({ type: 'text', text: extraContext })
+    }
+    return blocks
+  }
+
+  _buildSystem(taskPrompt, extraContext, knowledgeOverride) {
+    const knowledgeText = knowledgeOverride || (this._gameKnowledgeText || (this._gameKnowledgeText = buildFullGameKnowledgeText()))
+    const blocks = [
+      { type: 'text', text: knowledgeText, cache_control: { type: 'ephemeral' } },
       { type: 'text', text: taskPrompt, cache_control: { type: 'ephemeral' } },
     ]
     if (this.championKnowledge) {
@@ -93,6 +162,23 @@ class AiClient {
       blocks.push({ type: 'text', text: extraContext, cache_control: { type: 'ephemeral' } })
     }
     return blocks
+  }
+
+  _buildMacroInteractionSystem() {
+    return [
+      {
+        type: 'text',
+        text: 'あなたはLoLチャレンジャー帯のマクロコーチです。static_context と dynamic_context を読み、今この瞬間の次の1アクションだけを判断してください。',
+      },
+      {
+        type: 'text',
+        text: '必ずJSONのみで返答してください。キーは title, desc, warning, action, confidence を含めてください。',
+      },
+      {
+        type: 'text',
+        text: 'title は短く、desc は20-40文字程度、warning は短い注意1つにしてください。bootstrap時の static_context に含まれる知識を前提にし、updateでは繰り返さないでください。',
+      },
+    ]
   }
 
   clearMatch() {
@@ -107,9 +193,116 @@ class AiClient {
     // rank は試合間で維持（clearMatchでリセットしない）
     this.championKnowledge = null
     this._step1Cache = {}  // Step1キャッシュクリア
+    this._gameKnowledgeText = null  // 次の試合で再構築
+    // Gemini 明示的キャッシュをクリーンアップ
+    if (this.provider?.clearCaches) {
+      this.provider.clearCaches().catch(err =>
+        console.warn('[AiClient] Cache cleanup error:', err.message)
+      )
+    }
     this.lastMatchupTip = null
     this.lastMacroAdvice = null
     this.lastCoaching = null
+    this.interactions = {
+      build: { id: null, bootstrapped: false },
+      macro: { id: null, bootstrapped: false },
+    }
+  }
+
+  _isGeminiInteractionCapable() {
+    return this.provider?.type === 'gemini' && typeof this.provider?.sendInteraction === 'function'
+  }
+
+  _getMacroModel() {
+    if (this.provider?.type === 'gemini') return GEMINI_MACRO_MODEL
+    return this.model
+  }
+
+  _sanitizeMacroInput(structuredInput) {
+    if (!structuredInput || typeof structuredInput !== 'object') return structuredInput
+    const {
+      action_candidates,
+      ...rest
+    } = structuredInput
+    return rest
+  }
+
+  async _callInteractionApi({ kind, model, maxTokens, temperature = 0, system, messages, timeoutMs, logType, jsonSchema = null }) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const startTime = Date.now()
+    const session = this.getInteractionSession(kind)
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type: logType,
+      provider: this.getProviderType(),
+      model: model || '',
+      system: typeof system === 'string' ? system : system?.[0]?.text || '',
+      userMessage: messages[messages.length - 1]?.content || '',
+      response: null,
+      error: null,
+      durationMs: 0,
+      sessionInfo: {
+        kind,
+        mode: 'interactions',
+        model: model || '',
+        continued: !!session.id,
+        previousInteractionId: session.id || null,
+        interactionId: null,
+      },
+    }
+
+    try {
+      console.log(
+        `[AI:${logType}] interaction ${kind} ` +
+        `model=${model || '-'} ` +
+        `${session.id ? 'continue' : 'bootstrap'} ` +
+        `previous=${session.id || '-'}`
+      )
+      const result = await this.provider.sendInteraction({
+        model, maxTokens, temperature, system, messages,
+        previousInteractionId: session.id || null,
+        jsonSchema,
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeout)
+      logEntry.durationMs = Date.now() - startTime
+      logEntry.response = result.text
+
+      if (result.usage) {
+        logEntry.tokens = result.usage
+        console.log(`[AI:${logType}:${this.getProviderType()}:${model || ''}] tokens: in=${result.usage.input} out=${result.usage.output} cache_read=${result.usage.cache_read}`)
+      }
+
+      if (result.interactionId) {
+        this.setInteractionSession(kind, { id: result.interactionId, bootstrapped: true })
+        logEntry.sessionInfo.interactionId = result.interactionId
+        console.log(`[AI:${logType}] interaction ${kind} current=${result.interactionId}`)
+      }
+
+      const text = (result.text || '').replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim()
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        this._pushLog(logEntry)
+        return null
+      }
+
+      const parsed = JSON.parse(jsonMatch[0])
+      this._pushLog(logEntry)
+      return parsed
+    } catch (err) {
+      clearTimeout(timeout)
+      logEntry.durationMs = Date.now() - startTime
+      logEntry.error = err.message || String(err)
+      this._pushLog(logEntry)
+      if (/HTTP (401|403)/.test(logEntry.error)) {
+        const authErr = new Error(logEntry.error)
+        authErr.authError = true
+        throw authErr
+      }
+      return null
+    }
   }
 
   // 共通API呼び出し (プロバイダー経由)
@@ -121,6 +314,7 @@ class AiClient {
       timestamp: new Date().toISOString(),
       type: logType,
       provider: this.getProviderType(),
+      model: model || '',
       system: typeof system === 'string' ? system : system?.[0]?.text || '',
       userMessage: messages[messages.length - 1]?.content || '',
       response: null,
@@ -278,6 +472,37 @@ class AiClient {
     const isLocal = this.isLocalLLM()
 
     let aiResult
+    if (!isLocal && this._isGeminiInteractionCapable()) {
+      const session = this.getInteractionSession('build')
+      const staticPayload = {
+        me: structuredInput?.me ? {
+          champion: structuredInput.me.champion,
+          role: structuredInput.me.role,
+        } : null,
+        core_build: structuredInput?.core_build || [],
+      }
+      const dynamicPayload = session.bootstrapped ? {
+        me: structuredInput?.me,
+        enemy_damage_profile: structuredInput?.enemy_damage_profile,
+        enemy_healing: structuredInput?.enemy_healing,
+        enemy_threats: structuredInput?.enemy_threats,
+        situation: structuredInput?.situation,
+        candidates: structuredInput?.candidates,
+      } : structuredInput
+
+      const interactionMessage = session.bootstrapped
+        ? JSON.stringify({ update_type: 'build_update', dynamic_context: dynamicPayload }, null, 2)
+        : JSON.stringify({ update_type: 'build_bootstrap', static_context: staticPayload, dynamic_context: dynamicPayload }, null, 2)
+
+      aiResult = await this._callInteractionApi({
+        kind: 'build',
+        model: this.model, maxTokens: 600, temperature: 0,
+        system: this._buildSystem(ITEM_PROMPT, this.matchContext, buildItemKnowledgeText()),
+        messages: [{ role: 'user', content: interactionMessage }],
+        timeoutMs: 30000, logType: 'suggestion',
+        jsonSchema: ITEM_RESPONSE_SCHEMA
+      })
+    } else
     if (isLocal) {
       // ローカルLLM: マルチターンを避け、1メッセージにまとめる
       const parts = []
@@ -289,9 +514,11 @@ class AiClient {
         step1MaxTokens: 500, step2MaxTokens: 300, logPrefix: 'suggestion'
       })
     } else {
+      // RAG: アイテム判断に必要な知識のみ注入
+      const itemKnowledge = buildItemKnowledgeText()
       aiResult = await this._callApi({
         model: this.model, maxTokens: 600, temperature: 0,
-        system: this._buildSystem(ITEM_PROMPT, this.matchContext),
+        system: this._buildSystem(ITEM_PROMPT, this.matchContext, itemKnowledge),
         messages: [{ role: 'user', content: userMessage }],
         timeoutMs: 30000, logType: 'suggestion'
       })
@@ -336,9 +563,11 @@ class AiClient {
         step1MaxTokens: 600, step2MaxTokens: 400, logPrefix: 'matchup'
       })
     } else {
+      // RAG: レーニング知識のみ注入（1回限りなのでキャッシュ不要）
+      const laningKnowledge = buildLaningKnowledgeText()
       result = await this._callApi({
         model: this.qualityModel, maxTokens: 700, temperature: 0,
-        system: this._buildSystem(MATCHUP_PROMPT),
+        system: this._buildSystemNoCache(MATCHUP_PROMPT, null, laningKnowledge),
         messages: [{ role: 'user', content: userContent }],
         timeoutMs: 20000, logType: 'matchup'
       })
@@ -356,22 +585,57 @@ class AiClient {
   }
 
   async getMacroAdvice(staticContext, structuredInput) {
+    const sanitizedMacroInput = this._sanitizeMacroInput(structuredInput)
     // 後方互換: 第3引数がある場合は旧シグネチャ (staticContext, dynamicContext, availableObjectives)
     let dynamicContent
     if (arguments.length >= 3) {
       // 旧シグネチャ: (staticContext, dynamicContext, availableObjectives)
-      dynamicContent = typeof structuredInput === 'string'
-        ? structuredInput
-        : JSON.stringify(structuredInput, null, 2)
+      dynamicContent = typeof sanitizedMacroInput === 'string'
+        ? sanitizedMacroInput
+        : JSON.stringify(sanitizedMacroInput, null, 2)
     } else {
       // 新シグネチャ: (staticContext, structuredInput)
-      dynamicContent = typeof structuredInput === 'string'
-        ? structuredInput
-        : JSON.stringify(structuredInput, null, 2)
+      dynamicContent = typeof sanitizedMacroInput === 'string'
+        ? sanitizedMacroInput
+        : JSON.stringify(sanitizedMacroInput, null, 2)
     }
     const isLocal = this.isLocalLLM()
 
     let result
+    if (!isLocal && this._isGeminiInteractionCapable()) {
+      const session = this.getInteractionSession('macro')
+      const bootstrapStaticPayload = {
+        roster_summary: staticContext,
+        macro_knowledge: '',
+      }
+      const baseDynamicPayload = {
+        game_time: sanitizedMacroInput?.game_time,
+        me: sanitizedMacroInput?.me,
+        game_phase: sanitizedMacroInput?.game_phase,
+        situation: sanitizedMacroInput?.situation,
+        kill_diff: sanitizedMacroInput?.kill_diff,
+        gold_diff: sanitizedMacroInput?.gold_diff,
+        objectives: sanitizedMacroInput?.objectives,
+        towers: sanitizedMacroInput?.towers,
+        lane_state: sanitizedMacroInput?.lane_state,
+        enemy_threats: sanitizedMacroInput?.enemy_threats,
+        previous_advice: sanitizedMacroInput?.previous_advice,
+      }
+      const dynamicPayload = baseDynamicPayload
+
+      const interactionMessage = session.bootstrapped
+        ? JSON.stringify({ update_type: 'macro_update', dynamic_context: dynamicPayload }, null, 2)
+        : JSON.stringify({ update_type: 'macro_bootstrap', static_context: bootstrapStaticPayload, dynamic_context: dynamicPayload }, null, 2)
+
+      result = await this._callInteractionApi({
+        kind: 'macro',
+        model: this._getMacroModel(), maxTokens: 500, temperature: 0,
+        system: this._buildMacroInteractionSystem(),
+        messages: [{ role: 'user', content: interactionMessage }],
+        timeoutMs: 20000, logType: 'macro',
+        jsonSchema: MACRO_RESPONSE_SCHEMA
+      })
+    } else
     if (isLocal) {
       result = await this._twoStepLocal({
         step1System: LOCAL_MACRO_STEP1_PROMPT,
@@ -381,15 +645,11 @@ class AiClient {
         logPrefix: 'macro', timeoutMs: 60000
       })
     } else {
-      // staticContext は毎tick変わるためsystemではなくuserメッセージに含める
-      // （systemを安定させてGemini暗黙的キャッシュのプレフィックス一致率を高める）
-      const userContent = staticContext
-        ? `${staticContext}\n\n${dynamicContent}`
-        : dynamicContent
+      // staticContext（チーム構成）は試合中不変なのでsystemに含めてキャッシュ対象にする
       result = await this._callApi({
-        model: this.model, maxTokens: 500, temperature: 0,
-        system: this._buildSystem(MACRO_PROMPT),
-        messages: [{ role: 'user', content: userContent }],
+        model: this._getMacroModel(), maxTokens: 500, temperature: 0,
+        system: this._buildSystem(MACRO_PROMPT, staticContext),
+        messages: [{ role: 'user', content: dynamicContent }],
         timeoutMs: 20000, logType: 'macro'
       })
     }
@@ -425,7 +685,7 @@ class AiClient {
         model: this.qualityModel,
         maxTokens: 4000,
         temperature: 0.3,
-        system: this._buildSystem(COACHING_PROMPT),
+        system: this._buildSystemNoCache(COACHING_PROMPT),
         messages: [{ role: 'user', content: userContent }],
         timeoutMs: 60000,
         logType: 'coaching'
