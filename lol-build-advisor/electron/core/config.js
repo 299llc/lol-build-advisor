@@ -1,5 +1,8 @@
 // 定数・設定値
 module.exports = {
+  // フィーチャーフラグ
+  FEATURE_MACRO_ENABLED: false,  // Phase 2 で true に変更
+
   // ポーリング間隔
   POLL_INTERVAL_MS: 3000,
 

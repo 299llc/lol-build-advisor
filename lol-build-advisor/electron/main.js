@@ -10,14 +10,18 @@ const { GeminiProvider } = require('./api/providers/geminiProvider')
 const { OllamaSetup } = require('./api/ollamaSetup')
 const { ContextBuilder, extractEnName } = require('./api/contextBuilder')
 const { DiffDetector } = require('./api/diffDetector')
-const { setCacheDir, initPatchData, getVersion, getChampionById, getItemById, getSpells, loadSpellsForMatch, refreshCache, formatItemSummary } = require('./api/patchData')
-const { fetchChampionBuild, buildCoreBuildIds, fetchMatchupItems } = require('./api/opggClient')
+const { setCacheDir, initPatchData, getVersion, getChampionById, getItemById, getSpells, loadSpellsForMatch, refreshCache } = require('./api/patchData')
+const { fetchChampionBuild, buildCoreBuildIds } = require('./api/opggClient')
 const { LcuClient } = require('./api/lcuClient')
 const { detectFlags } = require('./core/championAnalysis')
 const { RuleEngine } = require('./core/ruleEngine')
-const { buildMacroStaticContext, buildMacroDynamicContext, getObjectivesSummary, getObjectiveTimers, getAvailableObjectiveNames } = require('./core/objectiveTracker')
+const { getObjectivesSummary } = require('./core/objectiveTracker')
 const { buildMatchChampionKnowledge } = require('./core/knowledgeDb')
-const { MACRO_INTERVAL_MS, MACRO_DEBOUNCE_MS, MACRO_FALLBACK_MS, RECALL_GOLD_THRESHOLDS, COUNTER_ITEMS, ITEM_COMPLETE_GOLD, ITEM_BOOT_GOLD, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS, isCompletedItem, classifyObjectiveEvents } = require('./core/config')
+const { FEATURE_MACRO_ENABLED, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS } = require('./core/config')
+const macroFeature = FEATURE_MACRO_ENABLED ? require('./features/macro') : null
+const suggestionFeature = require('./features/suggestion')
+const matchupFeature = require('./features/matchup')
+const coachingFeature = require('./features/coaching')
 const { SessionRecorder } = require('./core/sessionRecorder')
 const { GameLogger } = require('./core/gameLogger')
 const { Preprocessor } = require('./core/preprocessor')
@@ -83,7 +87,7 @@ const state = {
   lcuClient: null,
   aiEnabled: false,
   aiPending: false,
-  claudeModel: null,         // .env CLAUDE_MODEL (macro/suggestion用)
+  claudeModel: null,         // .env CLAUDE_MODEL (suggestion用)
   claudeQualityModel: null,  // .env CLAUDE_QUALITY_MODEL (matchup/coaching用)
 
   // 試合状態
@@ -104,24 +108,16 @@ const state = {
   matchupItemsLoaded: false,
   matchupTipLoaded: false,
 
-  // マクロ
-  lastMacroTime: 0,
-  macroPending: false,
-  lastObjectiveCount: 0,
-  lastTurretCount: 0,
-  _lastMacroFingerprint: null,
-  _prevMacroState: {},
   _lastSuggFingerprint: null,
 
   // 最後に送信したデータ（コンパクトウィンドウ再送用）
-  lastMacroAdvice: null,
+  lastMacroAdvice: null,  // macro feature が OFF でも null キャッシュとして残す
   lastMatchupTip: null,
   lastSubstituteItems: null,
   lastCoreBuildMsg: null,
   lastGameStatus: 'waiting',
   cachedEvents: [],  // フォールバック用イベントキャッシュ
   _lastObjLogKey: null,       // Objectivesログ重複防止（ゲーム中維持）
-  _lastObjTriggerKey: null,   // オブジェクトスポーン前トリガー重複防止（ゲーム中維持）
   _lastStatsMinute: 0,        // プレイヤースタッツログ重複防止
   _nonClassicLogged: false,   // ARAM等の非CLASSICモードログ重複防止
 
@@ -217,8 +213,7 @@ function saveRuntimeSession() {
       `[Session] Saved runtime session ` +
       `match=${state.matchSession.matchKey} ` +
       `build=${state.matchSession.buildInteractionId ? 'set' : 'none'} ` +
-      `macro=${state.matchSession.macroInteractionId ? 'set' : 'none'} ` +
-      `history=${(state.matchSession.macroAdviceHistory || []).length} ` +
+      (macroFeature ? `macro=${state.matchSession.macroInteractionId ? 'set' : 'none'} history=${(state.matchSession.macroAdviceHistory || []).length} ` : '') +
       `ended=${!!state.matchSession.ended}`
     )
   } catch (err) {
@@ -242,7 +237,7 @@ function loadRuntimeSession() {
       `[Session] Loaded runtime session ` +
       `match=${loaded?.matchKey || '-'} ` +
       `build=${loaded?.buildInteractionId ? 'set' : 'none'} ` +
-      `macro=${loaded?.macroInteractionId ? 'set' : 'none'} ` +
+      (macroFeature ? `macro=${loaded?.macroInteractionId ? 'set' : 'none'} ` : '') +
       `ended=${!!loaded?.ended}`
     )
     return loaded
@@ -280,8 +275,7 @@ function ensureMatchSession(me, gameTime) {
       player: me?.summonerName || me?.riotIdGameName || '',
       champion: me?.championName || '',
       buildInteractionId: null,
-      macroInteractionId: null,
-      macroAdviceHistory: [],
+      ...(macroFeature ? { macroInteractionId: null, macroAdviceHistory: [] } : {}),
       lastGameTime: gameTime,
       ended: false,
     }
@@ -293,10 +287,12 @@ function ensureMatchSession(me, gameTime) {
       id: state.matchSession.buildInteractionId || null,
       bootstrapped: !!state.matchSession.buildInteractionId,
     })
-    state.aiClient.setInteractionSession('macro', {
-      id: state.matchSession.macroInteractionId || null,
-      bootstrapped: !!state.matchSession.macroInteractionId,
-    })
+    if (macroFeature) {
+      state.aiClient.setInteractionSession('macro', {
+        id: state.matchSession.macroInteractionId || null,
+        bootstrapped: !!state.matchSession.macroInteractionId,
+      })
+    }
   }
 
   saveRuntimeSession()
@@ -306,64 +302,25 @@ function ensureMatchSession(me, gameTime) {
 function syncInteractionSessionsFromClient() {
   if (!state.aiClient || !state.matchSession) return
   const buildSession = state.aiClient.getInteractionSession('build')
-  const macroSession = state.aiClient.getInteractionSession('macro')
   const prevBuild = state.matchSession.buildInteractionId
-  const prevMacro = state.matchSession.macroInteractionId
   state.matchSession.buildInteractionId = buildSession?.id || null
-  state.matchSession.macroInteractionId = macroSession?.id || null
-  if (prevBuild !== state.matchSession.buildInteractionId || prevMacro !== state.matchSession.macroInteractionId) {
+  let changed = prevBuild !== state.matchSession.buildInteractionId
+  let macroLog = ''
+  if (macroFeature) {
+    const macroSession = state.aiClient.getInteractionSession('macro')
+    const prevMacro = state.matchSession.macroInteractionId
+    state.matchSession.macroInteractionId = macroSession?.id || null
+    if (prevMacro !== state.matchSession.macroInteractionId) changed = true
+    macroLog = ` macro=${prevMacro ? 'set' : 'none'}->${state.matchSession.macroInteractionId ? 'set' : 'none'}`
+  }
+  if (changed) {
     console.log(
       `[Session] Synced interaction ids ` +
-      `build=${prevBuild ? 'set' : 'none'}->${state.matchSession.buildInteractionId ? 'set' : 'none'} ` +
-      `macro=${prevMacro ? 'set' : 'none'}->${state.matchSession.macroInteractionId ? 'set' : 'none'}`
+      `build=${prevBuild ? 'set' : 'none'}->${state.matchSession.buildInteractionId ? 'set' : 'none'}` +
+      macroLog
     )
   }
   saveRuntimeSession()
-}
-
-function appendMacroAdviceHistory(entry) {
-  if (!state.matchSession) return
-  const history = state.matchSession.macroAdviceHistory || []
-  history.push(entry)
-  state.matchSession.macroAdviceHistory = history.slice(-10)
-  console.log(
-    `[Session] Appended macro history ` +
-    `count=${state.matchSession.macroAdviceHistory.length} ` +
-    `action=${entry?.action || '-'} trigger=${entry?.trigger || '-'} time=${entry?.gameTime ?? '-'}`
-  )
-  saveRuntimeSession()
-}
-
-function buildMacroBroadcastPayload(advice, gameTime, trigger, source = 'ai') {
-  return {
-    ...advice,
-    gameTime,
-    _meta: {
-      source,
-      trigger: trigger || null,
-      updatedAt: advice?.updatedAt || Date.now(),
-    },
-  }
-}
-
-function buildMacroFallbackPayload(alert, gameTime, trigger) {
-  return buildMacroBroadcastPayload({
-    title: alert.title,
-    desc: alert.desc,
-    warning: alert.warning || '',
-    _fallback: true,
-  }, gameTime, trigger, 'rule')
-}
-
-function summarizeMacroAdviceHistory() {
-  const history = state.matchSession?.macroAdviceHistory || []
-  return history.map(item => ({
-    game_time: item.gameTime,
-    action: item.action || '',
-    title: item.title || '',
-    desc: item.desc || '',
-    trigger: item.trigger || '',
-  }))
 }
 
 function isNormalEndFromEvents(events) {
@@ -530,7 +487,7 @@ function loadCompactWindowState() {
 // ── broadcast: メイン + コンパクト両方に送信 ─────
 function broadcast(channel, data) {
   // コンパクトウィンドウ再送用にキャッシュ
-  if (channel === 'macro:advice') state.lastMacroAdvice = data
+  if (channel === 'macro:advice' && macroFeature) state.lastMacroAdvice = data
   else if (channel === 'matchup:tip') state.lastMatchupTip = data
   else if (channel === 'substitute:items') state.lastSubstituteItems = data
   else if (channel === 'core:build') state.lastCoreBuildMsg = data
@@ -551,15 +508,8 @@ function sendStateToCompactWindow() {
   if (state.lastSuggestion) cw.webContents.send('ai:suggestion', state.lastSuggestion)
   if (state.lastSubstituteItems) cw.webContents.send('substitute:items', state.lastSubstituteItems)
   if (state.lastMatchupTip) cw.webContents.send('matchup:tip', state.lastMatchupTip)
-  if (state.lastMacroAdvice) cw.webContents.send('macro:advice', state.lastMacroAdvice)
+  if (macroFeature && state.lastMacroAdvice) cw.webContents.send('macro:advice', state.lastMacroAdvice)
   if (state.lastChampSelectExtras) cw.webContents.send('champselect:extras', state.lastChampSelectExtras)
-}
-
-// ── デバッグログ ──────────────────────────────────
-function macroLog(msg) {
-  const provider = state.aiClient?.getProviderType?.() || '?'
-  const model = state.aiClient?.provider?.defaultModel || '?'
-  console.log(`[Macro:${provider}:${model}] ${msg}`)
 }
 
 // ── IPC ハンドラ ──────────────────────────────────
@@ -850,13 +800,7 @@ function resetBuildState() {
   // AI提案
   state.lastSuggestion = null
   state.aiPending = false
-  // マクロ
-  state.lastMacroTime = 0
-  state.macroPending = false
-  state.lastObjectiveCount = 0
-  state._lastMacroFingerprint = null
-  state._prevMacroState = {}
-  state._lastObjTriggerKey = null
+  if (macroFeature) macroFeature.resetState()
   state._lastSuggFingerprint = null
   // コンパクトウィンドウ再送用キャッシュ
   state.lastMacroAdvice = null
@@ -881,10 +825,10 @@ function resetBuildState() {
     state.mainWindow.webContents.send('matchup:tip', null)
     state.mainWindow.webContents.send('ai:suggestion', null)
     state.mainWindow.webContents.send('substitute:items', [])
-    state.mainWindow.webContents.send('macro:advice', null)
+    if (macroFeature) state.mainWindow.webContents.send('macro:advice', null)
     state.mainWindow.webContents.send('coaching:result', null)
     state.mainWindow.webContents.send('ai:loading', false)
-    state.mainWindow.webContents.send('macro:loading', false)
+    if (macroFeature) state.mainWindow.webContents.send('macro:loading', false)
     state.mainWindow.webContents.send('coaching:loading', false)
     state.mainWindow.webContents.send('position:select', null)
   }
@@ -898,238 +842,6 @@ function resolveItemInfo(ids) {
     names: items.map((it, i) => it?.jaName || String(ids[i])),
     images: items.map(it => it?.image || null),
     descs: items.map(it => it?.fullDesc || it?.description || '')
-  }
-}
-
-// ── マクロアドバイス ──────────────────────────────
-async function requestMacroAdvice(gameData, me, allies, enemies, eventTrigger = null) {
-  if (state.macroPending || !state.aiClient || !state.aiEnabled) return
-
-  state.macroPending = true
-  broadcast('macro:loading', true)
-
-  try {
-    const gameState = state.currentGameState
-    const events = gameData.events?.Events || []
-    const gameTime = gameData.gameData?.gameTime || 0
-
-    // 前処理: 構造化入力を生成
-    const structuredInput = state.preprocessor.buildMacroInput(gameState, events)
-
-    // 状況未変化ならスキップ（コスト削減）
-    // objectivesのタイマー秒数やgold_diffの微差でfingerprintが変わらないよう正規化
-    const deadEnemies = (structuredInput.enemies || []).filter(e => e.isDead).map(e => e.champion).join(',')
-    const obj = structuredInput.objectives || {}
-    const objKey = `d${obj.dragon?.allyCount || 0}v${obj.dragon?.enemyCount || 0}_${obj.dragon?.available ? 'A' : ''}${obj.dragon?.soulPoint ? 'S' : ''}|b${obj.baron?.available ? 'A' : ''}`
-    const goldDiffRounded = Math.round((structuredInput.gold_diff || 0) / 1000) // 1000G単位で丸め
-    const macroFingerprint = `${structuredInput.game_phase}|${structuredInput.situation}|${structuredInput.kill_diff}|${goldDiffRounded}|${structuredInput.action_candidates.map(c => c.action).join(',')}|${objKey}|${JSON.stringify(structuredInput.towers)}|${deadEnemies}`
-    if (macroFingerprint === state._lastMacroFingerprint) {
-      macroLog(`Skipped: situation unchanged`)
-      state.macroPending = false
-      broadcast('macro:loading', false)
-      return
-    }
-    state._lastMacroFingerprint = macroFingerprint
-
-    console.log(`[Pipeline] Macro input: phase=${structuredInput.game_phase} situation=${structuredInput.situation} actions=${structuredInput.action_candidates.map(c => c.action).join(',')}`)
-
-    // staticContextはcache_control用に引き続き使う
-    const staticCtx = buildMacroStaticContext(me, allies, enemies)
-
-    // 推論
-    let rawResult = await state.aiClient.getMacroAdvice(staticCtx, structuredInput)
-    syncInteractionSessionsFromClient()
-    macroLog(`[Pipeline] Raw: ${JSON.stringify(rawResult).substring(0, 300)}`)
-
-    // 後処理
-    const actionCandidates = structuredInput.action_candidates.map(c => c.action)
-    const previousResult = state.postprocessor.lastMacroResult
-    const advice = state.postprocessor.processMacroResult(rawResult, actionCandidates, previousResult)
-
-    if (advice) {
-      // 次回フィードバック用に保存
-      state.preprocessor.setMacroAdvice(advice)
-      appendMacroAdviceHistory({
-        gameTime,
-        action: advice.action || '',
-        title: advice.title || '',
-        desc: advice.desc || '',
-        trigger: eventTrigger,
-      })
-
-      macroLog(`[Pipeline] Processed: ${JSON.stringify(advice).substring(0, 300)}`)
-      const payload = buildMacroBroadcastPayload(advice, gameTime, eventTrigger, 'ai')
-      broadcast('macro:advice', payload)
-      macroLog(`Sent: ${payload.title}`)
-    } else {
-      // フォールバック: ruleEngineのアラートを使用
-      const position = state.aiClient?.position || 'MID'
-      const ruleAlerts = state.ruleEngine ? state.ruleEngine.evaluate(gameData, position) : []
-      if (ruleAlerts.length > 0) {
-        const top = ruleAlerts[0]
-        const fallback = buildMacroFallbackPayload(top, gameTime, eventTrigger)
-        broadcast('macro:advice', fallback)
-        macroLog(`[Pipeline] Fallback to ruleEngine: ${top.title}`)
-      } else {
-        macroLog('[Pipeline] Postprocessor returned null, no ruleEngine fallback available')
-      }
-    }
-  } catch (err) {
-    if (err.authError) {
-      macroLog('Auth error - stopping. Check provider settings.')
-      state.aiEnabled = false
-      broadcast('ai:error', { type: 'auth', message: 'APIキーが無効またはプロバイダー未設定です。' })
-    } else {
-      macroLog(`Error: ${err.message}`)
-      broadcast('macro:advice', {
-        error: err.message,
-        _meta: {
-          source: 'error',
-          trigger: eventTrigger || null,
-          updatedAt: Date.now(),
-        }
-      })
-    }
-  } finally {
-    state.macroPending = false
-    broadcast('macro:loading', false)
-  }
-}
-
-// ── コーチング ────────────────────────────────────
-async function requestCoaching(snapshot, macroHistorySummary = null) {
-  if (!state.aiClient || !snapshot || !state.currentMatchAiAllowed) return
-
-  const { players, gameData: gd } = snapshot
-  const { me } = players || {}
-  if (!me) return
-
-  console.log('[Pipeline] Requesting coaching evaluation...')
-  broadcast('coaching:loading', true)
-
-  try {
-    // GameStateが残っていなければsnapshotから再構築
-    const gameState = state.currentGameState || state.preprocessor.buildGameState(
-      { activePlayer: snapshot.activePlayer, allPlayers: snapshot.allPlayers || [me, ...(players.allies || []), ...(players.enemies || [])], gameData: gd },
-      gd?.events?.Events || [],
-      { spectatorSelectedName: state.spectatorSelectedName || null }
-    )
-
-    const events = gd?.events?.Events || []
-    const coreBuild = state.currentCoreBuild
-      ? state.currentCoreBuild.ids.map((id, i) => ({ id, name: state.currentCoreBuild.names[i] }))
-      : []
-
-    // 前処理: 構造化入力を生成
-    const structuredInput = state.preprocessor.buildCoachingInput(gameState, state.preprocessor.gameLog, coreBuild, events)
-    structuredInput.macro_advice_history_summary = macroHistorySummary || summarizeMacroAdviceHistory()
-    console.log(`[Pipeline] Coaching input: duration=${structuredInput.game_duration}s phase=${structuredInput.game_phase_final} snapshots=${structuredInput.snapshot_count}`)
-
-    // 推論
-    const rawResult = await state.aiClient.getCoaching(structuredInput)
-
-    // 後処理
-    const result = state.postprocessor.processCoachingResult(rawResult)
-
-    if (result) {
-      console.log(`[Pipeline] Coaching processed: score=${result.overall_score}/10 build=${result.build_score}/10`)
-      if (result.sections) {
-        for (const s of result.sections) {
-          console.log(`[Pipeline] Coaching [${s.grade || '?'}] ${s.title}: ${(s.content || '').substring(0, 120)}`)
-        }
-      }
-      if (result.good_points) {
-        result.good_points.forEach((p, i) => console.log(`[Pipeline] Coaching Good${i+1}: ${p.substring(0, 120)}`))
-      }
-      if (result.improve_points) {
-        result.improve_points.forEach((p, i) => console.log(`[Pipeline] Coaching Improve${i+1}: ${p.substring(0, 120)}`))
-      }
-      if (result.next_game_advice) {
-        console.log(`[Pipeline] Coaching NextGame: ${result.next_game_advice.substring(0, 150)}`)
-      }
-      broadcast('coaching:result', result)
-      saveLastGame(snapshot, result)
-    } else {
-      console.error('[Pipeline] Coaching postprocessor returned null')
-      saveLastGame(snapshot, null)
-    }
-  } catch (err) {
-    console.error('[Pipeline] Coaching error:', err.message)
-    saveLastGame(snapshot, null)
-  } finally {
-    broadcast('coaching:loading', false)
-  }
-}
-
-// ── カウンターアイテム注入 ────────────────────────
-function injectCounterItems(items, enemies) {
-  const enemyFlags = new Set()
-  for (const e of enemies) {
-    for (const f of (e.flags || [])) enemyFlags.add(f)
-  }
-
-  const existingIds = new Set(items.map(it => String(it.id)))
-  const coreIds = new Set((state.currentCoreBuild?.ids || []).map(String))
-  const toAdd = []
-
-  for (const [flag, counterIds] of Object.entries(COUNTER_ITEMS)) {
-    if (!enemyFlags.has(flag)) continue
-    for (const id of counterIds) {
-      if (existingIds.has(id) || coreIds.has(id)) continue
-      const patchItem = getItemById(id)
-      if (!patchItem) continue
-      toAdd.push({ id, jaName: patchItem.jaName || id, desc: patchItem.fullDesc || patchItem.description || '' })
-      existingIds.add(id)
-    }
-  }
-  if (toAdd.length > 0) {
-    console.log(`[CounterItems] Injected: ${toAdd.map(it => it.jaName).join(', ')}`)
-  }
-  return [...items, ...toAdd]
-}
-
-// ── フォールバック候補 ────────────────────────────
-function buildFallbackSubstituteItems() {
-  const analysis = state.currentAnalysis
-  if (!analysis) return []
-
-  const seen = new Set()
-  const coreIds = new Set((state.currentCoreBuild?.ids || []).map(String))
-  const items = []
-
-  const sources = [
-    ...(analysis.fourthItems || []),
-    ...(analysis.fifthItems || []),
-    ...(analysis.sixthItems || []),
-    ...(analysis.lastItems || [])
-  ]
-
-  for (const entry of sources) {
-    for (const id of (entry.ids || [])) {
-      const idStr = String(id)
-      if (seen.has(idStr) || coreIds.has(idStr)) continue
-      seen.add(idStr)
-      const patchItem = getItemById(idStr)
-      if (!isCompletedItem(patchItem)) continue
-      items.push({ id: idStr, jaName: patchItem.jaName || idStr, desc: patchItem.fullDesc || patchItem.description || '' })
-    }
-  }
-  return items.slice(0, 15)
-}
-
-function useFallbackSubstituteItems(enemies) {
-  let fallback = buildFallbackSubstituteItems()
-  if (enemies) fallback = injectCounterItems(fallback, enemies)
-  if (fallback.length > 0) {
-    if (state.aiClient) state.aiClient.setSubstituteItems(fallback)
-    const candidatesForUI = fallback.map(it => {
-      const patchItem = getItemById(it.id)
-      return { id: it.id, name: it.jaName, image: patchItem?.image || null }
-    })
-    broadcast('substitute:items', candidatesForUI)
-    console.log(`[MatchupItems] Fallback: ${fallback.length} items from OP.GG analysis`)
-  } else {
-    broadcast('substitute:error', 'マッチアップデータを取得できませんでした')
   }
 }
 
@@ -1293,7 +1005,7 @@ async function checkEndOfGameOrChampSelect() {
         console.log(`[GameEnd] LCU phase=${phase}, triggering coaching`)
         if (state.aiClient && state.aiEnabled) {
           state.coachingRequested = true
-          requestCoaching(state.lastGameSnapshot)
+          coachingFeature.requestCoaching(state.lastGameSnapshot)
         }
         return
       }
@@ -1311,7 +1023,7 @@ function triggerGameEnd() {
   if (snapshotForCoaching) {
     snapshotForCoaching.normal_end = normalEnd
   }
-  const macroHistorySummary = summarizeMacroAdviceHistory()
+  const macroHistorySummary = macroFeature ? macroFeature.summarizeMacroAdviceHistory() : null
 
   // UIから古いコーチング結果を即座にクリア
   broadcast('coaching:result', null)
@@ -1327,7 +1039,6 @@ function triggerGameEnd() {
     state.manualPosition = null
     state.positionSelectSent = false
     state._lastObjLogKey = null
-    state._lastObjTriggerKey = null
 
     // clearMatch はコーチングが使わないので安全
     if (state.aiClient) state.aiClient.clearMatch()
@@ -1336,7 +1047,7 @@ function triggerGameEnd() {
     if (state.aiClient && state.aiEnabled && !state.coachingRequested && wasSpellsLoaded) {
       state.coachingRequested = true
       console.log('[GameEnd] Requesting coaching evaluation...')
-      requestCoaching(snapshotForCoaching, macroHistorySummary)
+      coachingFeature.requestCoaching(snapshotForCoaching, macroHistorySummary)
     } else {
       console.log(`[GameEnd] Coaching skipped: aiClient=${!!state.aiClient} aiEnabled=${state.aiEnabled} coachingRequested=${state.coachingRequested}`)
       saveLastGame(snapshotForCoaching, null)
@@ -1402,9 +1113,7 @@ async function handleGameData(gameData) {
     state.lastSuggestion = null
     state.coachingRequested = false
     state.gameEndTriggered = false
-    state.lastMacroTime = 0
-    state.macroPending = false
-    state.lastObjectiveCount = 0
+    if (macroFeature) macroFeature.resetState()
   }
 
   const allPlayers = gameData.allPlayers || []
@@ -1505,10 +1214,10 @@ async function handleGameData(gameData) {
   handleCoreBuild(me, resolvedPosition)
 
   // マッチアップアイテム
-  handleMatchupItems(me, resolvedPosition, enemies)
+  matchupFeature.handleMatchupItems(me, resolvedPosition, enemies)
 
   // マッチアップTip
-  handleMatchupTip(me, resolvedPosition, enemies)
+  matchupFeature.handleMatchupTip(me, resolvedPosition, enemies)
 
   // イベント取得（オブジェクト状況 + マクロコンテキスト両方で使う）
   let events = gameData.events?.Events || []
@@ -1599,10 +1308,10 @@ async function handleGameData(gameData) {
   state.preprocessor.recordSnapshot(gameState, gt)
 
   // AI提案
-  handleAiSuggestion(gameData)
+  suggestionFeature.handleAiSuggestion(gameData)
 
   // マクロアドバイス
-  handleMacroAdvice(gameData, me, allies, enemies)
+  if (macroFeature) macroFeature.handleMacroAdvice(gameData, me, allies, enemies)
 
   // ルールベースアラート (LLM不要)
   if (state.ruleEngine) {
@@ -1725,279 +1434,6 @@ function handleCoreBuild(me, resolvedPosition) {
   }
 }
 
-function findLaneOpponent(enemies, position, logTag) {
-  let opponent = enemies.find(e => e.position === position)
-  if (!opponent?.enName) {
-    opponent = enemies.find(e => e.enName)
-    if (opponent) {
-      console.log(`[${logTag}] No exact lane match for ${position}, using ${opponent.enName} as fallback`)
-    }
-  }
-  return opponent?.enName ? opponent : null
-}
-
-function handleMatchupItems(me, resolvedPosition, enemies) {
-  if (state.matchupItemsLoaded || !me.enName || !resolvedPosition || !state.aiClient || !state.currentCoreBuild) return
-
-  const laneOpponent = findLaneOpponent(enemies, resolvedPosition, 'MatchupItems')
-  if (!laneOpponent) return
-
-  state.matchupItemsLoaded = true
-  fetchMatchupItems(me.enName, laneOpponent.enName, resolvedPosition).then(items => {
-    if (items && items.length > 0) {
-      const coreIds = new Set((state.currentCoreBuild?.ids || []).map(String))
-      const completed = items.reduce((acc, it) => {
-        if (acc.length >= 15 || coreIds.has(String(it.id))) return acc
-        const patchItem = getItemById(it.id)
-        if (!patchItem) { acc.push(it); return acc }
-        if (isCompletedItem(patchItem)) {
-          acc.push({ ...it, desc: patchItem.fullDesc || patchItem.description || '' })
-        }
-        return acc
-      }, [])
-      const withCounters = injectCounterItems(completed, enemies)
-      state.aiClient.setSubstituteItems(withCounters)
-      const candidatesForUI = withCounters.map(it => ({
-        id: it.id, name: it.jaName, image: getItemById(it.id)?.image || null
-      }))
-      broadcast('substitute:items', candidatesForUI)
-      console.log(`[MatchupItems] ${me.enName} vs ${laneOpponent.enName}: ${withCounters.length} items`)
-    } else {
-      console.warn('[MatchupItems] No data returned, using fallback')
-      useFallbackSubstituteItems(enemies)
-    }
-  }).catch(err => {
-    console.error('[MatchupItems] Error:', err.message)
-    useFallbackSubstituteItems(enemies)
-  })
-}
-
-function handleMatchupTip(me, resolvedPosition, enemies) {
-  if (!state.currentMatchAiAllowed) return
-  if (state.matchupTipLoaded || !me.enName || !resolvedPosition || !state.aiClient || !state.aiEnabled || !state.currentCoreBuild) {
-    if (!state.matchupTipLoaded && me.enName && resolvedPosition) {
-      console.log(`[MatchupTip] Waiting... claude=${!!state.aiClient} ai=${state.aiEnabled} coreBuild=${!!state.currentCoreBuild}`)
-    }
-    return
-  }
-
-  const laneOpponent = findLaneOpponent(enemies, resolvedPosition, 'MatchupTip')
-  if (!laneOpponent) return
-
-  state.matchupTipLoaded = true
-
-  const gameState = state.currentGameState
-  if (!gameState) {
-    console.warn('[Pipeline] MatchupTip: no gameState available, will retry')
-    state.matchupTipLoaded = false
-    return
-  }
-
-  // 前処理: 構造化入力を生成
-  const spellData = getSpells(laneOpponent.enName)
-  const structuredInput = state.preprocessor.buildMatchupInput(gameState, spellData)
-  console.log(`[Pipeline] MatchupTip input: ${me.enName} vs ${structuredInput.opponent?.champion || '?'} (${resolvedPosition})`)
-
-  broadcast('matchup:loading', { loading: true, opponent: laneOpponent.championName, opponentPartner: structuredInput.opponent_partner?.champion || null })
-
-  state.aiClient.getMatchupTip(structuredInput).then(rawTip => {
-    // 後処理
-    const tip = state.postprocessor.processMatchupResult(rawTip, structuredInput.opponent)
-
-    if (tip) {
-      tip.opponent = laneOpponent.championName
-      tip.opponentPartner = structuredInput.opponent_partner?.champion || null
-      tip.myChampion = me.championName
-      tip.mySkills = structuredInput.me?.skills || null
-      tip.opponentSkills = structuredInput.opponent?.skills || null
-      broadcast('matchup:loading', false)
-      broadcast('matchup:tip', tip)
-      console.log(`[Pipeline] MatchupTip processed: ${me.enName} vs ${laneOpponent.enName}: ${tip.summary}`)
-    } else {
-      broadcast('matchup:loading', false)
-      console.warn('[Pipeline] MatchupTip postprocessor returned null, will retry')
-      state.matchupTipLoaded = false
-    }
-  }).catch(err => {
-    broadcast('matchup:loading', false)
-    if (err.authError) {
-      console.error('[MatchupTip] Auth error - stopping retries. Check provider settings.')
-      state.aiEnabled = false
-      broadcast('ai:error', { type: 'auth', message: 'APIキーが無効またはプロバイダー未設定です。' })
-    } else {
-      console.error('[MatchupTip] Error:', err.message, '- will retry')
-      state.matchupTipLoaded = false
-    }
-  })
-}
-
-function handleAiSuggestion(gameData) {
-  if (!state.currentMatchAiAllowed) return
-  const triggered = state.diffDetector.check(gameData)
-
-  // 15分未満はAI提案しない
-  const gameTime = gameData.gameData?.gameTime || 0
-  if (gameTime < 900) return
-
-  if ((triggered || !state.lastSuggestion) && !state.aiPending && state.aiClient && state.aiEnabled && state.currentCoreBuild) {
-    const gameState = state.currentGameState
-    if (!gameState) return
-
-    // 前処理: 構造化入力を生成
-    const coreBuild = state.currentCoreBuild.ids.map((id, i) => ({ id, name: state.currentCoreBuild.names[i] }))
-    const substituteItems = state.aiClient.getSubstituteItems() || []
-    const structuredInput = state.preprocessor.buildItemInput(gameState, coreBuild, substituteItems)
-    const candidateIds = structuredInput.candidates.map(c => c.id)
-
-    // 重複スキップ: 候補リスト+状況が前回と同じならAPI呼び出しを省略
-    const suggFingerprint = `${candidateIds.join(',')}|${structuredInput.situation}|${structuredInput.me?.level || 0}|${(structuredInput.me?.items || []).map(i => i.id).join(',')}`
-    if (suggFingerprint === state._lastSuggFingerprint && state.lastSuggestion) {
-      return // 候補もアイテム構成も変わっていない → スキップ
-    }
-    state._lastSuggFingerprint = suggFingerprint
-
-    console.log(`[Pipeline] Item input: candidates=[${candidateIds.join(',')}] situation=${structuredInput.situation}`)
-
-    state.aiPending = true
-    broadcast('ai:loading', true)
-    state.aiClient.getSuggestion(structuredInput).then(rawResult => {
-      syncInteractionSessionsFromClient()
-      // 後処理
-      const previousResult = state.postprocessor.lastItemResult
-      const processedResult = state.postprocessor.processItemResult(rawResult, candidateIds, previousResult)
-
-      if (processedResult) {
-        // 次回フィードバック用に保存
-        state.preprocessor.setItemAdvice(processedResult)
-
-        // UIに送るデータを整形
-        const s = { ...processedResult }
-        if (s.recommended) {
-          s.recommended = s.recommended.map(r => {
-            const item = getItemById(String(r.id))
-            return { ...r, name: item?.jaName || r.id, image: item?.image || '' }
-          })
-        }
-        s.gameTime = gameData.gameData?.gameTime || 0
-        // 推薦蓄積（既存互換）
-        s.history = rawResult?.history || {}
-        s.totalCalls = rawResult?.totalCalls || 0
-        state.lastSuggestion = s
-        const recNames = (s.recommended || []).map(r => r.name || r.id).join(', ')
-        console.log(`[Pipeline] Item processed: t=${Math.floor(s.gameTime)}s recommended=[${recNames}] reason=${(s.reasoning || '').substring(0, 80)}`)
-        broadcast('ai:suggestion', s)
-      }
-      state.aiPending = false
-      broadcast('ai:loading', false)
-    }).catch(err => {
-      state.aiPending = false
-      broadcast('ai:loading', false)
-      if (err.authError) {
-        console.error('[AiSuggestion] Auth error - stopping. Check provider settings.')
-        state.aiEnabled = false
-        broadcast('ai:error', { type: 'auth', message: 'APIキーが無効またはプロバイダー未設定です。' })
-      } else {
-        broadcast('ai:suggestion', { error: err.message })
-      }
-    })
-  }
-}
-
-function handleMacroAdvice(gameData, me, allies, enemies) {
-  if (!state.currentMatchAiAllowed) return
-  const now = Date.now()
-  const events = gameData.events?.Events || []
-  // オブジェクトキルイベント数(APIが返さない場合は0のまま → 時間ベーストリガーのみ)
-  const objEvents = classifyObjectiveEvents(events)
-  const objectiveCount = objEvents.dragon.length + objEvents.baron.length + objEvents.herald.length + objEvents.voidgrub.length
-  const turretCount = events.filter(e => e.EventName === 'TurretKilled').length
-  const objectiveTaken = objectiveCount > state.lastObjectiveCount || turretCount > (state.lastTurretCount || 0)
-  if (objectiveCount > state.lastObjectiveCount) state.lastObjectiveCount = objectiveCount
-  if (turretCount > (state.lastTurretCount || 0)) state.lastTurretCount = turretCount
-
-  // キル/デス検出トリガー
-  const championKillCount = events.filter(e => e.EventName === 'ChampionKill').length
-  const killDeathOccurred = championKillCount > (state.lastChampionKillCount || 0)
-  if (championKillCount > (state.lastChampionKillCount || 0)) state.lastChampionKillCount = championKillCount
-
-  const timeSinceLastMacro = now - state.lastMacroTime
-
-  // オブジェクトスポーン90秒前トリガー
-  const gt = gameData.gameData?.gameTime || 0
-  const timers = getObjectiveTimers(events, gt)
-  const OBJ_PRE_TRIGGER_SEC = 90
-  const OBJ_PRE_TRIGGER_MIN_SEC = 30 // 30秒以内なら「もう近すぎ」ではなく準備として有効
-  let objectivePreTrigger = false
-  const approachingObjs = []
-  for (const [name, remaining] of Object.entries(timers)) {
-    if (remaining > OBJ_PRE_TRIGGER_MIN_SEC && remaining <= OBJ_PRE_TRIGGER_SEC) {
-      approachingObjs.push(`${name}:${remaining}s`)
-    }
-  }
-  if (approachingObjs.length > 0) {
-    // オブジェクト名のみで比較（秒数の変化で再発火させない）
-    const triggerKey = approachingObjs.map(o => o.split(':')[0]).join(',')
-    if (triggerKey !== state._lastObjTriggerKey && timeSinceLastMacro >= MACRO_DEBOUNCE_MS) {
-      objectivePreTrigger = true
-      state._lastObjTriggerKey = triggerKey
-    }
-  }
-
-  // ── イベント駆動トリガー（periodic_90s廃止） ──
-  // 時間経過ではなく「意味のある変化」でのみAPI呼び出し
-  const gameState = state.currentGameState
-  const prevMacroState = state._prevMacroState || {}
-  let eventTrigger = null
-
-  if (!eventTrigger && objectiveTaken) {
-    eventTrigger = 'objective_taken'
-  }
-  if (!eventTrigger && objectivePreTrigger) {
-    eventTrigger = `objective_approaching: ${approachingObjs.join(', ')}`
-  }
-  if (!eventTrigger && killDeathOccurred && timeSinceLastMacro >= MACRO_DEBOUNCE_MS) {
-    eventTrigger = 'kill_death'
-  }
-
-  // ゴールド閾値超え（リコール判断に影響）
-  if (!eventTrigger && gameState?.me && timeSinceLastMacro >= MACRO_DEBOUNCE_MS) {
-    const currGold = gameState.me.gold || 0
-    const prevGold = prevMacroState.gold || 0
-    const thresholds = RECALL_GOLD_THRESHOLDS
-    for (const t of thresholds) {
-      if (prevGold < t && currGold >= t) {
-        eventTrigger = `gold_threshold_${t}`
-        break
-      }
-    }
-  }
-
-  // バフ切れ（バロン/エルダー終了 → 戦略転換）
-  if (!eventTrigger && gameState?.objectives && timeSinceLastMacro >= MACRO_DEBOUNCE_MS) {
-    const currBuffs = gameState.objectives.buffs || {}
-    const prevBuffs = prevMacroState.buffs || {}
-    if (prevBuffs.baron && !currBuffs.baron) eventTrigger = 'baron_buff_expired'
-    if (prevBuffs.elder && !currBuffs.elder) eventTrigger = 'elder_buff_expired'
-  }
-
-  // 5分フォールバック（長時間イベントなし時の安全弁）
-  if (!eventTrigger && timeSinceLastMacro >= MACRO_FALLBACK_MS) {
-    eventTrigger = 'fallback_300s'
-  }
-
-  if (state.aiClient && state.aiEnabled && !state.macroPending && eventTrigger) {
-    state.lastMacroTime = now
-    // 次回比較用に状態保存
-    if (gameState?.me) {
-      state._prevMacroState = {
-        gold: gameState.me.gold || 0,
-        buffs: { ...(gameState.objectives?.buffs || {}) },
-      }
-    }
-    macroLog(`Triggering macro advice (${eventTrigger})`)
-    requestMacroAdvice(gameData, me, allies, enemies, eventTrigger)
-  }
-}
 
 function stopPolling() {
   if (state.pollingInterval) {
@@ -2022,6 +1458,14 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     createWindow()
     setupIPC()
+
+    // feature モジュール初期化
+    state._saveRuntimeSession = saveRuntimeSession
+    state._syncInteractionSessionsFromClient = syncInteractionSessionsFromClient
+    suggestionFeature.init(state, broadcast)
+    matchupFeature.init(state, broadcast)
+    coachingFeature.init(state, broadcast, { macroFeature, saveLastGame })
+    if (macroFeature) macroFeature.init(state, broadcast)
 
     // .env からモデル設定を読み込み（プロバイダー別、ログは復元後に出力）
     const env = loadEnv()

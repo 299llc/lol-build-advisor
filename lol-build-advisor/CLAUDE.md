@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-League of Legends の試合中にリアルタイムの戦況データを取得し、4種のClaude AI分析（アイテム提案/マッチアップTip/マクロアドバイス/試合後コーチング）で最適なビルド・戦略を提案する Electron デスクトップアプリ。BYOK（Bring Your Own Key）型。
+League of Legends の試合中にリアルタイムの戦況データを取得し、AI分析（アイテム提案/マッチアップTip/試合後コーチング）で最適なビルド・戦略を提案する Electron デスクトップアプリ。
+
+### フィーチャーフラグ
+
+- **`FEATURE_MACRO_ENABLED`** (`electron/core/config.js`): マクロアドバイス機能の有効/無効。Phase 2 で `true` にする。`false` の場合、`electron/features/macro.js` は読み込まれず、マクロ関連の AI 呼び出し・IPC 送信は一切行われない。UI コンポーネント（`MacroAdvice.jsx`）はコードに残るがデータが来ないため非表示になる。
 
 ## 開発コマンド
 
@@ -25,6 +29,7 @@ npm run electron:build
 
 - **Main Process** (`electron/main.js`): エントリポイント。状態管理 (`state` オブジェクト)、IPC ハンドラ、3秒間隔ポーリング、AI呼び出し制御
 - **Core** (`electron/core/`): 共通ロジック。設定定数、チャンプ分析、オブジェクトタイマー、AIプロンプト
+- **Features** (`electron/features/`): フィーチャーフラグで制御される機能モジュール（現在: `macro.js`）
 - **API** (`electron/api/`): 外部API連携。Claude API、OP.GG、Data Dragon、Live Client Data、LCU
 - **Preload** (`electron/preload.js`): `contextBridge` で `window.electronAPI` を公開
 - **Renderer** (`src/`): React + Tailwind CSS v4。Vite でビルドし `dist/` に出力
@@ -35,7 +40,7 @@ npm run electron:build
 LoL Client (port 2999) → LiveClientPoller (3秒ポーリング)
   → DiffDetector (アイテム購入/キルデス/2分経過で発火、10秒デバウンス)
   → ContextBuilder (静的+動的コンテキスト)
-  → ClaudeApiClient (Haiku: 提案/マッチアップ/マクロ、Sonnet: コーチング)
+  → ClaudeApiClient (Haiku: 提案/マッチアップ、Sonnet: コーチング、マクロはPhase 2)
   → IPC で Renderer に送信
 ```
 
@@ -85,8 +90,8 @@ LoL Client (port 2999) → LiveClientPoller (3秒ポーリング)
 | `ai:suggestion` | M→R | AIアイテム提案 |
 | `ai:loading` | M→R | AI 問い合わせ中フラグ |
 | `matchup:tip` | M→R | マッチアップTip |
-| `macro:advice` | M→R | マクロアドバイス |
-| `macro:loading` | M→R | マクロ問い合わせ中フラグ |
+| `macro:advice` | M→R | マクロアドバイス（Phase 2、`FEATURE_MACRO_ENABLED` で制御） |
+| `macro:loading` | M→R | マクロ問い合わせ中フラグ（Phase 2） |
 | `coaching:result` | M→R | 試合後コーチング結果 |
 | `coaching:loading` | M→R | コーチング問い合わせ中フラグ |
 | `substitute:items` | M→R | 入れ替え候補アイテム一覧 |
