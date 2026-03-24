@@ -1,6 +1,6 @@
 {
   "name": "lol-build-advisor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "LoL リアルタイムビルド提案デスクトップアプリ",
   "author": "299LLC",
   "main": "electron/main.js",

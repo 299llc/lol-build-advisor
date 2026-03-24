@@ -22,7 +22,6 @@ const DEFAULT_MODELS = {
   default: 'claude-haiku-4-5-20251001',
 }
 
-const GEMINI_MACRO_MODEL = 'gemini-2.5-flash-lite'
 
 const MACRO_RESPONSE_SCHEMA = {
   type: 'object',
@@ -69,8 +68,12 @@ class AiClient {
   /**
    * @param {string|object} providerOrApiKey - API キー文字列 (後方互換) またはプロバイダーインスタンス
    * @param {object} [opts] - オプション
-   * @param {string} [opts.model] - 高頻度呼び出し用モデル (macro/suggestion)
-   * @param {string} [opts.qualityModel] - 品質重視呼び出し用モデル (matchup/coaching)
+   * @param {string} [opts.model] - 高頻度呼び出し用モデル (フォールバック)
+   * @param {string} [opts.qualityModel] - 品質重視呼び出し用モデル (フォールバック)
+   * @param {string} [opts.suggestionModel] - アイテム提案用モデル
+   * @param {string} [opts.matchupModel] - マッチアップ用モデル
+   * @param {string} [opts.macroModel] - マクロアドバイス用モデル
+   * @param {string} [opts.coachingModel] - コーチング用モデル
    */
   constructor(providerOrApiKey, opts = {}) {
     if (typeof providerOrApiKey === 'string') {
@@ -82,6 +85,10 @@ class AiClient {
     const defaultModel = DEFAULT_MODELS[this.provider?.type] || DEFAULT_MODELS.default
     this.model = opts.model || defaultModel
     this.qualityModel = opts.qualityModel || defaultModel
+    this.suggestionModel = opts.suggestionModel || this.model
+    this.matchupModel = opts.matchupModel || this.qualityModel
+    this.macroModel = opts.macroModel || null  // null → _getMacroModel() でプロバイダー別デフォルト
+    this.coachingModel = opts.coachingModel || this.qualityModel
     this.coreBuild = null
     this.substituteItems = []
     this.matchContext = null
@@ -214,8 +221,7 @@ class AiClient {
   }
 
   _getMacroModel() {
-    if (this.provider?.type === 'gemini') return GEMINI_MACRO_MODEL
-    return this.model
+    return this.macroModel || this.model
   }
 
   _sanitizeMacroInput(structuredInput) {
@@ -499,7 +505,7 @@ class AiClient {
 
       aiResult = await this._callInteractionApi({
         kind: 'build',
-        model: this.model, maxTokens: 600, temperature: 0,
+        model: this.suggestionModel, maxTokens: 600, temperature: 0,
         system: this._buildSystem(ITEM_PROMPT, this.matchContext, buildItemKnowledgeText()),
         messages: [{ role: 'user', content: interactionMessage }],
         timeoutMs: 30000, logType: 'suggestion',
@@ -520,7 +526,7 @@ class AiClient {
       // RAG: アイテム判断に必要な知識のみ注入
       const itemKnowledge = buildItemKnowledgeText()
       aiResult = await this._callApi({
-        model: this.model, maxTokens: 600, temperature: 0,
+        model: this.suggestionModel, maxTokens: 600, temperature: 0,
         system: this._buildSystem(ITEM_PROMPT, this.matchContext, itemKnowledge),
         messages: [{ role: 'user', content: userMessage }],
         timeoutMs: 30000, logType: 'suggestion'
@@ -569,7 +575,7 @@ class AiClient {
       // RAG: レーニング知識のみ注入（1回限りなのでキャッシュ不要）
       const laningKnowledge = buildLaningKnowledgeText()
       result = await this._callApi({
-        model: this.qualityModel, maxTokens: 700, temperature: 0,
+        model: this.matchupModel, maxTokens: 700, temperature: 0,
         system: this._buildSystemNoCache(MATCHUP_PROMPT, null, laningKnowledge),
         messages: [{ role: 'user', content: userContent }],
         timeoutMs: 20000, logType: 'matchup'
@@ -691,8 +697,8 @@ class AiClient {
       const roleKey = posToRole[this.position] || null
       const knowledgeForRole = roleKey ? buildCoachingKnowledgeText(roleKey) : buildFullGameKnowledgeText()
       result = await this._callApi({
-        model: this.qualityModel,
-        maxTokens: 4000,
+        model: this.coachingModel,
+        maxTokens: 3000,
         temperature: 0.3,
         system: this._buildSystemNoCache(COACHING_PROMPT, null, knowledgeForRole),
         messages: [{ role: 'user', content: userContent }],

@@ -16,6 +16,66 @@ function CopyButton({ text }) {
   )
 }
 
+// プロンプトテキスト内の【静的情報】【動的情報】セクションを色分け表示
+function PromptText({ text }) {
+  if (!text) return null
+  // 【静的情報...】〜次の【...】まで / 【動的情報...】〜次の【...】まで を検出して色分け
+  const segments = []
+  const regex = /【(静的情報[^】]*)】|【(動的情報[^】]*)】/g
+  let lastIdx = 0
+  let currentType = null  // 'static' | 'dynamic' | null
+  let match
+
+  // セクションヘッダーの位置を全て収集
+  const headers = []
+  const headerRegex = /【[^】]+】/g
+  let hm
+  while ((hm = headerRegex.exec(text)) !== null) {
+    headers.push(hm.index)
+  }
+
+  while ((match = regex.exec(text)) !== null) {
+    // 前のセクションを閉じる
+    if (lastIdx < match.index) {
+      segments.push({ type: currentType, text: text.slice(lastIdx, match.index) })
+    }
+    // このヘッダーから次の大セクションヘッダーまでの範囲を決定
+    currentType = match[1] ? 'static' : 'dynamic'
+    lastIdx = match.index
+  }
+  // 残りのテキスト
+  if (lastIdx < text.length) {
+    segments.push({ type: currentType, text: text.slice(lastIdx) })
+  }
+  // 色分けがない場合はそのまま表示
+  if (segments.length <= 1 && !currentType) {
+    return (
+      <pre className="text-[10px] text-lol-text-light bg-lol-bg rounded p-2 mt-0.5 whitespace-pre-wrap max-h-32 overflow-y-auto select-text cursor-text border-l-2 border-cyan-400/30">
+        {text}
+      </pre>
+    )
+  }
+  return (
+    <pre className="text-[10px] text-lol-text-light bg-lol-bg rounded p-2 mt-0.5 whitespace-pre-wrap max-h-48 overflow-y-auto select-text cursor-text border-l-2 border-cyan-400/30">
+      {segments.map((seg, i) => {
+        if (seg.type === 'static') {
+          return <span key={i} className="bg-amber-400/8 border-l-2 border-amber-400/40 pl-1 -ml-1 block">{seg.text.split('\n').map((line, li) => {
+            if (line.match(/【静的情報/)) return <span key={li} className="text-amber-400 font-bold">{line}{'\n'}</span>
+            return <span key={li}>{line}{li < seg.text.split('\n').length - 1 ? '\n' : ''}</span>
+          })}</span>
+        }
+        if (seg.type === 'dynamic') {
+          return <span key={i} className="bg-lol-blue/8 border-l-2 border-lol-blue/40 pl-1 -ml-1 block">{seg.text.split('\n').map((line, li) => {
+            if (line.match(/【動的情報/)) return <span key={li} className="text-lol-blue font-bold">{line}{'\n'}</span>
+            return <span key={li}>{line}{li < seg.text.split('\n').length - 1 ? '\n' : ''}</span>
+          })}</span>
+        }
+        return <span key={i}>{seg.text}</span>
+      })}
+    </pre>
+  )
+}
+
 const makeLabels = (base, label, color, bg) => ({
   [base]: { label, color, bg },
   [`${base}-step1`]: { label: `${label} STEP1`, color, bg },
@@ -52,6 +112,7 @@ export function DebugPanel({ onClose }) {
   const [promptPreview, setPromptPreview] = useState(null)
   const [previewExpanded, setPreviewExpanded] = useState(null)
   const [previewRole, setPreviewRole] = useState('')
+  const [previewPhase, setPreviewPhase] = useState({}) // { build: 'bootstrap'|'update', macro: 'bootstrap'|'update' }
 
   const refresh = async () => {
     const data = await window.electronAPI?.getAiLogs()
@@ -164,13 +225,14 @@ export function DebugPanel({ onClose }) {
               </div>
               <div className="px-3 pb-3 space-y-1.5">
                 {[
-                  { key: 'build', label: 'BUILD', color: 'text-lol-gold', border: 'border-lol-gold/30' },
-                  { key: 'matchup', label: 'MATCHUP', color: 'text-purple-400', border: 'border-purple-400/30' },
-                  { key: 'coaching', label: 'COACHING', color: 'text-green-400', border: 'border-green-400/30' },
-                ].map(({ key, label, color, border }) => {
+                  { key: 'build', label: 'BUILD', color: 'text-lol-gold', border: 'border-lol-gold/30', badgeBg: 'bg-lol-gold/10 border-lol-gold/30' },
+                  { key: 'matchup', label: 'MATCHUP', color: 'text-purple-400', border: 'border-purple-400/30', badgeBg: 'bg-purple-400/10 border-purple-400/30' },
+                  { key: 'coaching', label: 'COACHING', color: 'text-green-400', border: 'border-green-400/30', badgeBg: 'bg-green-400/10 border-green-400/30' },
+                ].map(({ key, label, color, border, badgeBg }) => {
                   const data = promptPreview[key]
                   if (!data) return null
                   const isOpen = previewExpanded === key
+                  const sp = data.sendPattern
                   return (
                     <div key={key} className={`rounded border ${border} bg-lol-surface`}>
                       <button
@@ -179,13 +241,29 @@ export function DebugPanel({ onClose }) {
                       >
                         {isOpen ? <ChevronDown size={10} className="text-lol-text" /> : <ChevronRight size={10} className="text-lol-text" />}
                         <span className={`text-[10px] font-heading tracking-wider ${color}`}>{label}</span>
+                        {sp && (
+                          <span className={`text-[8px] px-1.5 py-0.5 rounded border ${sp.type === 'recurring' ? 'bg-lol-blue/10 border-lol-blue/30 text-lol-blue' : 'bg-amber-400/10 border-amber-400/30 text-amber-400'}`}>
+                            {sp.label}
+                          </span>
+                        )}
                         <span className="text-[10px] text-lol-text ml-auto">{(data.knowledgeChars / 1000).toFixed(1)}k chars</span>
                       </button>
                       {isOpen && (
                         <div className="px-3 pb-2 space-y-1.5">
+                          {sp?.detail && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-lol-bg/50 border border-lol-gold-dim/20">
+                              <Info size={10} className="text-lol-text shrink-0" />
+                              <span className="text-[9px] text-lol-text">{sp.detail}</span>
+                            </div>
+                          )}
                           <div>
                             <div className="flex items-center justify-between">
-                              <span className="text-[9px] text-lol-blue font-heading tracking-wider">KNOWLEDGE</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-lol-blue font-heading tracking-wider">KNOWLEDGE</span>
+                                {sp?.knowledgeLabel && (
+                                  <span className="text-[8px] px-1 py-0.5 rounded bg-lol-blue/10 text-lol-blue/70">{sp.knowledgeLabel}</span>
+                                )}
+                              </div>
                               <CopyButton text={data.knowledge} />
                             </div>
                             <pre className="text-[10px] text-lol-text-light bg-lol-bg rounded p-2 mt-0.5 whitespace-pre-wrap max-h-48 overflow-y-auto select-text cursor-text border-l-2 border-lol-blue/30">
@@ -197,10 +275,69 @@ export function DebugPanel({ onClose }) {
                               <span className="text-[9px] text-cyan-400 font-heading tracking-wider">PROMPT</span>
                               <CopyButton text={data.prompt} />
                             </div>
-                            <pre className="text-[10px] text-lol-text-light bg-lol-bg rounded p-2 mt-0.5 whitespace-pre-wrap max-h-32 overflow-y-auto select-text cursor-text border-l-2 border-cyan-400/30">
-                              {data.prompt}
-                            </pre>
+                            <PromptText text={data.prompt} />
                           </div>
+                          {data.examplePayloads && (
+                            <div>
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-[9px] text-lol-gold font-heading tracking-wider">USER MESSAGE</span>
+                                <div className="flex ml-auto">
+                                  {[
+                                    { id: 'bootstrap', label: '初回', desc: '静的+動的' },
+                                    { id: 'update', label: '2回目以降', desc: '動的のみ' },
+                                  ].map(({ id, label, desc }) => (
+                                    <button
+                                      key={id}
+                                      onClick={() => setPreviewPhase(p => ({ ...p, [key]: id }))}
+                                      className={`px-2 py-0.5 text-[9px] border ${
+                                        (previewPhase[key] || 'bootstrap') === id
+                                          ? 'bg-lol-gold/15 border-lol-gold/40 text-lol-gold'
+                                          : 'bg-lol-surface border-lol-gold-dim/20 text-lol-text hover:text-lol-text-light'
+                                      } ${id === 'bootstrap' ? 'rounded-l' : 'rounded-r border-l-0'}`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {(() => {
+                                const phase = previewPhase[key] || 'bootstrap'
+                                const payload = data.examplePayloads[phase]
+                                if (!payload) return null
+                                const json = JSON.stringify(payload, null, 2)
+                                return (
+                                  <div className="relative">
+                                    <div className="absolute top-1 right-1"><CopyButton text={json} /></div>
+                                    <pre className="text-[10px] bg-lol-bg rounded p-2 whitespace-pre-wrap max-h-56 overflow-y-auto select-text cursor-text border-l-2 border-lol-gold/30">
+                                      {json.split('\n').map((line, li) => {
+                                        // static_context行をハイライト
+                                        if (line.includes('"static_context"')) return <span key={li} className="text-amber-400">{line}{'\n'}</span>
+                                        // dynamic_context行をハイライト
+                                        if (line.includes('"dynamic_context"')) return <span key={li} className="text-lol-blue">{line}{'\n'}</span>
+                                        // update_type行をハイライト
+                                        if (line.includes('"update_type"')) return <span key={li} className="text-cyan-400">{line}{'\n'}</span>
+                                        // static_context内のキーは黄色系
+                                        if (phase === 'bootstrap' && (line.includes('"enemy_skills"') || line.includes('"enemy_healing"') || line.includes('"enemy_cc_level"') || line.includes('"core_build"'))) {
+                                          return <span key={li} className="text-amber-300/80">{line}{'\n'}</span>
+                                        }
+                                        return <span key={li} className="text-lol-text-light">{line}{'\n'}</span>
+                                      })}
+                                    </pre>
+                                    <div className="flex items-center gap-2 mt-1 px-1">
+                                      {phase === 'bootstrap' ? (
+                                        <>
+                                          <span className="inline-flex items-center gap-1 text-[8px]"><span className="w-2 h-2 rounded-sm bg-amber-400/30 border border-amber-400/50" /> static_context — 初回のみ送信</span>
+                                          <span className="inline-flex items-center gap-1 text-[8px]"><span className="w-2 h-2 rounded-sm bg-lol-blue/30 border border-lol-blue/50" /> dynamic_context — 毎回更新</span>
+                                        </>
+                                      ) : (
+                                        <span className="text-[8px] text-lol-text">static_context は会話履歴に残っているため省略。dynamic_context のみ送信</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

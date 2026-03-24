@@ -390,6 +390,7 @@ function createWindow() {
     resizable: true,
     skipTaskbar: false,
     hasShadow: false,
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -430,6 +431,7 @@ function toggleCompactWindow() {
     resizable: true,
     skipTaskbar: false,
     hasShadow: false,
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -536,11 +538,19 @@ function setupIPC() {
       return {
         ...(state.geminiModel && { model: state.geminiModel }),
         ...(state.geminiQualityModel && { qualityModel: state.geminiQualityModel }),
+        ...(state.geminiSuggestionModel && { suggestionModel: state.geminiSuggestionModel }),
+        ...(state.geminiMatchupModel && { matchupModel: state.geminiMatchupModel }),
+        ...(state.geminiMacroModel && { macroModel: state.geminiMacroModel }),
+        ...(state.geminiCoachingModel && { coachingModel: state.geminiCoachingModel }),
       }
     }
     return {
       ...(state.claudeModel && { model: state.claudeModel }),
       ...(state.claudeQualityModel && { qualityModel: state.claudeQualityModel }),
+      ...(state.claudeSuggestionModel && { suggestionModel: state.claudeSuggestionModel }),
+      ...(state.claudeMatchupModel && { matchupModel: state.claudeMatchupModel }),
+      ...(state.claudeMacroModel && { macroModel: state.claudeMacroModel }),
+      ...(state.claudeCoachingModel && { coachingModel: state.claudeCoachingModel }),
     }
   }
 
@@ -718,16 +728,48 @@ function setupIPC() {
         knowledge: buildItemKnowledgeText(),
         prompt: ITEM_PROMPT,
         knowledgeChars: buildItemKnowledgeText().length,
+        sendPattern: { type: 'recurring', label: '毎回送信（静的+動的）', knowledgeLabel: '毎回（キャッシュ）', detail: '初回: 静的+動的の全情報 / 2回目以降: 動的のみ更新' },
+        examplePayloads: {
+          bootstrap: {
+            update_type: 'build_bootstrap',
+            static_context: {
+              me: { champion: 'Jinx', role: 'ADC' },
+              core_build: [{ id: '3031', name: 'インフィニティ エッジ' }, { id: '3094', name: 'ストームレイザー' }],
+              enemy_skills: [{ champion: 'Caitlyn', passive: '...', spells: '...(QWER詳細)' }],
+              enemy_healing: 'needed',
+              enemy_cc_level: 'medium',
+            },
+            dynamic_context: {
+              me: { champion: 'Jinx', role: 'ADC', level: 6, items: [], gold: 1200, status: 'normal' },
+              enemy_damage_profile: { ad: 65, ap: 35 },
+              enemy_threats: [],
+              situation: 'even',
+              candidates: [{ id: '3031', name: 'インフィニティ エッジ', tag: 'core' }],
+            },
+          },
+          update: {
+            update_type: 'build_update',
+            dynamic_context: {
+              me: { champion: 'Jinx', role: 'ADC', level: 11, items: [{ id: '3031', name: 'インフィニティ エッジ' }], gold: 800, status: 'normal' },
+              enemy_damage_profile: { ad: 60, ap: 40 },
+              enemy_threats: [{ champion: 'Zed', reason: '5/1/2', level: 13, completedItems: 3 }],
+              situation: 'behind',
+              candidates: [{ id: '3094', name: 'ストームレイザー', tag: 'core' }, { id: '3026', name: 'ガーディアン エンジェル', tag: 'counter' }],
+            },
+          },
+        },
       },
       matchup: {
         knowledge: buildLaningKnowledgeText(),
         prompt: MATCHUP_PROMPT,
         knowledgeChars: buildLaningKnowledgeText().length,
+        sendPattern: { type: 'once', label: '試合開始時1回', knowledgeLabel: '1回のみ', detail: '対面確定後に1回だけ送信。結果を試合終了まで再利用' },
       },
       coaching: {
         knowledge: roleKey ? buildCoachingKnowledgeText(roleKey) : '(ロール未検出 — 全セクション送信)',
         prompt: COACHING_PROMPT,
         knowledgeChars: roleKey ? buildCoachingKnowledgeText(roleKey).length : 0,
+        sendPattern: { type: 'once', label: '試合終了時1回', knowledgeLabel: '1回のみ', detail: '試合終了後に全データをまとめて1回送信' },
       },
     }
   })
@@ -1504,19 +1546,35 @@ if (!gotTheLock) {
     const env = loadEnv()
     if (env.CLAUDE_MODEL) state.claudeModel = env.CLAUDE_MODEL
     if (env.CLAUDE_QUALITY_MODEL) state.claudeQualityModel = env.CLAUDE_QUALITY_MODEL
+    if (env.CLAUDE_SUGGESTION_MODEL) state.claudeSuggestionModel = env.CLAUDE_SUGGESTION_MODEL
+    if (env.CLAUDE_MATCHUP_MODEL) state.claudeMatchupModel = env.CLAUDE_MATCHUP_MODEL
+    if (env.CLAUDE_MACRO_MODEL) state.claudeMacroModel = env.CLAUDE_MACRO_MODEL
+    if (env.CLAUDE_COACHING_MODEL) state.claudeCoachingModel = env.CLAUDE_COACHING_MODEL
     if (env.GEMINI_MODEL) state.geminiModel = env.GEMINI_MODEL
     if (env.GEMINI_QUALITY_MODEL) state.geminiQualityModel = env.GEMINI_QUALITY_MODEL
+    if (env.GEMINI_SUGGESTION_MODEL) state.geminiSuggestionModel = env.GEMINI_SUGGESTION_MODEL
+    if (env.GEMINI_MATCHUP_MODEL) state.geminiMatchupModel = env.GEMINI_MATCHUP_MODEL
+    if (env.GEMINI_MACRO_MODEL) state.geminiMacroModel = env.GEMINI_MACRO_MODEL
+    if (env.GEMINI_COACHING_MODEL) state.geminiCoachingModel = env.GEMINI_COACHING_MODEL
 
     const _restoreModelOpts = (providerType) => {
       if (providerType === 'gemini') {
         return {
           ...(state.geminiModel && { model: state.geminiModel }),
           ...(state.geminiQualityModel && { qualityModel: state.geminiQualityModel }),
+          ...(state.geminiSuggestionModel && { suggestionModel: state.geminiSuggestionModel }),
+          ...(state.geminiMatchupModel && { matchupModel: state.geminiMatchupModel }),
+          ...(state.geminiMacroModel && { macroModel: state.geminiMacroModel }),
+          ...(state.geminiCoachingModel && { coachingModel: state.geminiCoachingModel }),
         }
       }
       return {
         ...(state.claudeModel && { model: state.claudeModel }),
         ...(state.claudeQualityModel && { qualityModel: state.claudeQualityModel }),
+        ...(state.claudeSuggestionModel && { suggestionModel: state.claudeSuggestionModel }),
+        ...(state.claudeMatchupModel && { matchupModel: state.claudeMatchupModel }),
+        ...(state.claudeMacroModel && { macroModel: state.claudeMacroModel }),
+        ...(state.claudeCoachingModel && { coachingModel: state.claudeCoachingModel }),
       }
     }
     const aiOpts = _restoreModelOpts()

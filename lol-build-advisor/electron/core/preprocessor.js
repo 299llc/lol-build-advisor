@@ -47,13 +47,15 @@ function calcTeamDamage(players) {
       playerAd += data.stats?.FlatPhysicalDamageMod || 0
       playerAp += data.stats?.FlatMagicDamageMod || 0
     }
-    // アイテムがない序盤はチャンプ基本情報で補完
+    // アイテムがない序盤はタグベースで補完（info.magic はダメージタイプ指標ではないため使わない）
     if (playerAd === 0 && playerAp === 0) {
       const champMap = getAllChampions() || {}
       const enName = extractEnName(p)
       const champ = Object.values(champMap).find(c => c.enName === enName)
-      playerAd = champ?.info?.attack || 5
-      playerAp = champ?.info?.magic || 5
+      const tags = champ?.tags || []
+      const isAp = tags.includes('Mage') && !tags.includes('Marksman') && !tags.includes('Assassin') && !tags.includes('Fighter')
+      playerAd = isAp ? 2 : 8
+      playerAp = isAp ? 8 : 2
     }
     ad += playerAd
     ap += playerAp
