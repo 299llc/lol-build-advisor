@@ -7,7 +7,7 @@ import { KillBar } from './KillBar'
 import { MatchupTip } from './MatchupTip'
 import { MacroAdvice } from './MacroAdvice'
 import { RuleAlerts } from './RuleAlerts'
-import { Clock, Eye, MapPin, Loader2, AlertTriangle, Target } from 'lucide-react'
+import { Clock, Eye, MapPin, Loader2, AlertTriangle, Target, ChevronDown, ChevronRight } from 'lucide-react'
 
 const POSITIONS = [
   { value: 'TOP', label: 'TOP' },
@@ -105,6 +105,33 @@ function sortByPosition(players) {
   )
 }
 
+function GameInfoAccordion({ gameTime, leftKills, rightKills, allyIsLeft, leftTeam, rightTeam, me, ddragon, objectivesStatus }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded border border-lol-surface-light/40 bg-lol-surface/60">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 text-left"
+      >
+        {open ? <ChevronDown size={14} className="text-lol-text shrink-0" /> : <ChevronRight size={14} className="text-lol-text shrink-0" />}
+        <Clock size={12} className="text-lol-gold shrink-0" />
+        <span className="font-heading text-xs text-lol-gold tracking-wider">{formatTime(gameTime)}</span>
+        <span className="text-[10px] text-lol-text ml-auto">
+          {allyIsLeft ? leftKills : rightKills}K / {allyIsLeft ? rightKills : leftKills}K
+        </span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1.5">
+          <KillBar leftKills={leftKills} rightKills={rightKills} allyIsLeft={allyIsLeft} />
+          <TeamList label={allyIsLeft ? 'ALLY' : 'ENEMY'} players={leftTeam} isAlly={allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="left" />
+          <TeamList label={allyIsLeft ? 'ENEMY' : 'ALLY'} players={rightTeam} isAlly={!allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="right" />
+          {objectivesStatus && <ObjectivesPanel objectives={objectivesStatus} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ObjectivesPanel({ objectives }) {
   if (!objectives) return null
   const items = [
@@ -149,88 +176,102 @@ export function MainScreen({ data, coreBuild, aiSuggestion, aiLoading, positionS
   // 試合終了後のコーチング（フル幅で上に表示）
   if (ended) {
     return (
-      <div className="flex flex-col gap-2 p-3 h-full overflow-y-auto">
-        {(coaching || coachingLoading) && (
-          <CoachingPanel coaching={coaching} loading={coachingLoading} />
-        )}
-        <div className="text-center py-1 px-3 rounded bg-lol-red/20 border border-lol-red/30">
-          <span className="font-heading text-xs text-lol-red tracking-wider">GAME ENDED</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <KillBar leftKills={leftKills} rightKills={rightKills} allyIsLeft={allyIsLeft} />
-            <TeamList label={allyIsLeft ? 'ALLY' : 'ENEMY'} players={leftTeam} isAlly={allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="left" />
-            <TeamList label={allyIsLeft ? 'ENEMY' : 'ALLY'} players={rightTeam} isAlly={!allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="right" />
+      <div className="flex flex-col h-full overflow-y-auto">
+        <div className="flex flex-col gap-2 py-3 px-4">
+          {(coaching || coachingLoading) && (
+            <CoachingPanel coaching={coaching} loading={coachingLoading} />
+          )}
+          <div className="text-center py-1 px-3 rounded bg-lol-red/20 border border-lol-red/30">
+            <span className="font-heading text-xs text-lol-red tracking-wider">GAME ENDED</span>
           </div>
-          <div className="space-y-2">
-            <BuildPanel
-              coreBuild={coreBuild}
-              coreBuildLoading={false}
-              suggestion={aiSuggestion}
-              substituteItems={substituteItems}
-              ownedItemIds={new Set((me?.items || []).map(i => String(i.itemID)))}
-              ddragon={ddragon}
-              aiLoading={false}
-              compact={false}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <KillBar leftKills={leftKills} rightKills={rightKills} allyIsLeft={allyIsLeft} />
+              <TeamList label={allyIsLeft ? 'ALLY' : 'ENEMY'} players={leftTeam} isAlly={allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="left" />
+              <TeamList label={allyIsLeft ? 'ENEMY' : 'ALLY'} players={rightTeam} isAlly={!allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="right" />
+            </div>
+            <div className="space-y-2">
+              <BuildPanel
+                coreBuild={coreBuild}
+                coreBuildLoading={false}
+                suggestion={aiSuggestion}
+                substituteItems={substituteItems}
+                ownedItemIds={new Set((me?.items || []).map(i => String(i.itemID)))}
+                ddragon={ddragon}
+                aiLoading={false}
+                compact={false}
+              />
+            </div>
           </div>
+          {/* 試合終了後の広告 */}
         </div>
-        {/* 試合終了後の広告 */}
       </div>
     )
   }
 
   return (
     <div className="grid grid-cols-2 h-full p-2 gap-2 overflow-hidden">
-      {/* ===== 左カラム: チーム情報 ===== */}
-      <div className="flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden min-w-0">
+      {/* ===== 左カラム: 自チャンプ + アラート ===== */}
+      <div className="flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden min-w-0 pl-2 pr-1">
         {/* ポジション選択・観戦モード */}
         {positionSelectChamp && !coreBuild && <PositionSelect />}
         {isSpectator && allPlayers?.length > 0 && (
           <SpectatorSelect allPlayers={allPlayers} currentName={me?.summonerName || ''} coreBuildReady={!!coreBuild} />
         )}
 
-        {/* タイマー + キルバー */}
-        <div className="flex items-center justify-center gap-2 py-0.5">
-          <Clock size={13} className="text-lol-gold" />
-          <span className="font-heading text-sm text-lol-gold tracking-wider">
-            {formatTime(gameTime)}
-          </span>
+        {/* チャンピオンアイコン + スキルオーダー */}
+        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded bg-lol-surface/80 border border-lol-gold/20">
+          {me?.enName && (
+            <img
+              src={`${ddragon}/img/champion/${me.enName}.png`}
+              alt={me.championName}
+              className="w-10 h-10 rounded-lg border border-lol-gold/40"
+              onError={(e) => { e.target.style.display = 'none' }}
+            />
+          )}
+          <div className="flex flex-col gap-1 min-w-0">
+            <span className="text-sm font-medium text-lol-gold">{me?.championName}</span>
+            {skillOrder?.length > 0 && (
+              <div className="flex items-center gap-1">
+                {skillOrder.map((skill, i) => (
+                  <span key={i} className="flex items-center gap-1">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      skill === 'Q' ? 'bg-blue-500/30 text-blue-400' :
+                      skill === 'W' ? 'bg-green-500/30 text-green-400' :
+                      skill === 'E' ? 'bg-yellow-500/30 text-yellow-400' :
+                      'bg-red-500/30 text-red-400'
+                    }`}>
+                      {skill}
+                    </span>
+                    {i < skillOrder.length - 1 && (
+                      <span className="text-[9px] text-lol-text-light">＞</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <KillBar leftKills={leftKills} rightKills={rightKills} allyIsLeft={allyIsLeft} />
+        {/* ルールベースアラート（大きめ表示） */}
+        <RuleAlerts alerts={ruleAlerts} prominent />
 
-        {/* スキルオーダー */}
-        {skillOrder?.length > 0 && (
-          <div className="flex items-center justify-center gap-1.5 py-0.5">
-            {skillOrder.map((skill, i) => (
-              <span key={i} className="flex items-center gap-1.5">
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                  skill === 'Q' ? 'bg-blue-500/30 text-blue-400' :
-                  skill === 'W' ? 'bg-green-500/30 text-green-400' :
-                  skill === 'E' ? 'bg-yellow-500/30 text-yellow-400' :
-                  'bg-red-500/30 text-red-400'
-                }`}>
-                  {skill}
-                </span>
-                {i < skillOrder.length - 1 && (
-                  <span className="text-[9px] text-lol-text-light">＞</span>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* チーム一覧 */}
-        <TeamList label={allyIsLeft ? 'ALLY' : 'ENEMY'} players={leftTeam} isAlly={allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="left" />
-        <TeamList label={allyIsLeft ? 'ENEMY' : 'ALLY'} players={rightTeam} isAlly={!allyIsLeft} myName={me?.summonerName} ddragon={ddragon} side="right" />
-
-        {/* オブジェクト状況 */}
-        {objectivesStatus && <ObjectivesPanel objectives={objectivesStatus} />}
+        {/* 試合情報（折りたたみ） */}
+        <GameInfoAccordion
+          gameTime={gameTime}
+          leftKills={leftKills}
+          rightKills={rightKills}
+          allyIsLeft={allyIsLeft}
+          leftTeam={leftTeam}
+          rightTeam={rightTeam}
+          me={me}
+          ddragon={ddragon}
+          objectivesStatus={objectivesStatus}
+        />
       </div>
 
       {/* ===== 右カラム: AI情報 ===== */}
-      <div className="flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden min-w-0">
+      <div className="flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden min-w-0 pl-1 pr-2">
         {/* 対面アドバイス（レーン戦終了後は自動折りたたみ） */}
         <MatchupTip tip={matchupTip} loading={matchupLoading} laningOver={gameTime >= 900} />
 
@@ -245,9 +286,6 @@ export function MainScreen({ data, coreBuild, aiSuggestion, aiLoading, positionS
           aiLoading={aiLoading}
           compact={false}
         />
-
-        {/* ルールベースアラート */}
-        <RuleAlerts alerts={ruleAlerts} />
 
         {/* マクロアドバイス（データがある場合のみ表示） */}
         {(macroAdvice || macroLoading) && <MacroAdvice advice={macroAdvice} loading={macroLoading} />}

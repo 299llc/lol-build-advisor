@@ -53,6 +53,7 @@ function loadScenario(name) {
   emit('champselect:team', [])
   emit('champselect:extras', null)
   emit('objectives:status', null)
+  emit('rule:alerts', [])
 
   // シナリオデータを順次発火（少し遅延を入れてReactに反映させる）
   setTimeout(() => {
@@ -73,6 +74,7 @@ function loadScenario(name) {
     if (s.champSelectTeam) emit('champselect:team', s.champSelectTeam)
     if (s.champSelectExtras) emit('champselect:extras', s.champSelectExtras)
     if (s.objectivesStatus) emit('objectives:status', s.objectivesStatus)
+    if (s.ruleAlerts) emit('rule:alerts', s.ruleAlerts)
   }, 50)
 }
 
@@ -130,6 +132,7 @@ const mockAPI = {
   onMacroAdvice: (cb) => on('macro:advice', cb),
   onMacroLoading: (cb) => on('macro:loading', cb),
   onObjectivesStatus: (cb) => on('objectives:status', cb),
+  onRuleAlerts: (cb) => on('rule:alerts', cb),
 
   // コンパクトビュー（ブラウザモードでは何もしない）
   openCompactView: () => Promise.resolve(),

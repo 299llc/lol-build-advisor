@@ -185,6 +185,22 @@
   "champSelectExtras": {
     "skills": { "order": ["W", "Q", "E"], "pickRate": 0.52 }
   },
+  "ruleAlerts": [
+    { "type": "numerical_advantage", "priority": 8, "title": "数的有利！ (3v5)", "desc": "ゼド・ダリウスが落ちている。オブジェクトやタワーを狙おう" },
+    { "type": "obj_now_ドラゴン", "priority": 7, "title": "ドラゴン周辺に集結", "desc": "ドラゴンまで25秒。スイーパーで視界を除去しよう" },
+    { "type": "plate_ending", "priority": 6, "title": "プレート消滅間近！", "desc": "あと28秒でプレート消滅。ラストチャンスを逃すな" },
+    { "type": "death", "priority": 6, "title": "デス後の立て直し", "desc": "リスポーン後はウェーブ回収から。焦ってファイトに行かないこと", "warning": "ゼドが育っている (5キル)。単独で戦わないこと" },
+    { "type": "cs_critical", "priority": 7, "title": "CS改善が急務", "desc": "CS 85 / 144目安 (59%)。ミニオンを逃さないよう意識しよう", "warning": "CSが低いとアイテム差が開き、戦闘で不利になる" },
+    { "type": "cs_warning", "priority": 4, "title": "CS意識", "desc": "CS 105 / 144目安。サイドウェーブを回収しよう" },
+    { "type": "enemy_fed", "priority": 5, "title": "育った敵に警戒", "desc": "ゼド(5キル)。集団で対処し、単独では戦わないこと", "warning": "ストップウォッチの購入を検討" },
+    { "type": "level_disadvantage", "priority": 5, "title": "レベル差に注意", "desc": "Lv11 (敵平均Lv13)。ファームでレベル差を縮めよう", "warning": "レベル差がある状態での1v1は避けること" },
+    { "type": "level_advantage", "priority": 3, "title": "レベル有利を活かそう", "desc": "Lv14 (敵平均Lv12)。レベル差がある今、積極的に仕掛けよう" },
+    { "type": "fed_warning", "priority": 4, "title": "シャットダウンに注意", "desc": "5キル中。デスするとシャットダウンゴールドを渡してしまう。無駄なリスクを避けよう" },
+    { "type": "recall_timing", "priority": 4, "title": "リコールタイミング", "desc": "所持ゴールド1350G — コンポーネントが購入可能。ウェーブを押してからリコールしよう" },
+    { "type": "ward_critical", "priority": 5, "title": "視界管理が不足", "desc": "ワードスコア 5 (目安: 14)。ワードを置いて視界を確保しよう", "warning": "視界がないとガンクや奇襲を防げない" },
+    { "type": "ward_warning", "priority": 3, "title": "ワードを意識しよう", "desc": "ワードスコア 8 (目安: 14)。リコール時やオブジェクト前にワード設置を忘れずに" },
+    { "type": "teamfight_push", "priority": 8, "title": "集団戦勝利！タワー/オブジェクトを狙え", "desc": "直近30秒で3キル獲得。この有利を活かしてタワーかオブジェクトを確保しよう", "warning": "ジャングルに散らばらず、チームで同じ目標を攻めること" }
+  ],
   "objectivesStatus": {
     "dragon": "ドラゴン: 2体討伐 (スポーン済み・取得可能)",
     "baron": "バロン: スポーンまで2:00",

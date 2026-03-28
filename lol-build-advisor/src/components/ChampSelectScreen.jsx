@@ -197,7 +197,8 @@ export function ChampSelectScreen({ suggestion, aiLoading, ddragon, team, extras
   const ddBase = ddragon || DDRAGON_FALLBACK
 
   return (
-    <div className="flex flex-col gap-3 p-3">
+    <div className="flex flex-col gap-3 py-3 h-full overflow-y-auto">
+      <div className="flex flex-col gap-3 px-4">
       <div className="py-2 px-3 rounded bg-lol-blue/10 border border-lol-blue/30">
         <div className="flex items-center justify-center gap-2">
           <Swords size={16} className="text-lol-blue" />
@@ -371,6 +372,7 @@ export function ChampSelectScreen({ suggestion, aiLoading, ddragon, team, extras
           チャンピオンをピックするとコアビルドを表示します
         </p>
       )}
+      </div>
     </div>
   )
 }

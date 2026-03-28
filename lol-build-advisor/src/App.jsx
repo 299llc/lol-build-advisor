@@ -47,7 +47,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-lol-bg overflow-hidden">
+    <div className="h-full flex flex-col bg-lol-bg overflow-hidden">
       <TitleBar
         status={status}
         onSettings={() => setShowSettings(true)}

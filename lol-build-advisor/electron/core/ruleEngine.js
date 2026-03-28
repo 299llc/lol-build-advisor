@@ -10,6 +10,19 @@ const CS_BENCHMARKS = {
   TOP: 7.0, JG: 5.5, MID: 7.5, ADC: 8.0, SUP: 1.0,
 }
 
+// ワードスコア基準値 (分あたり)
+const WARD_BENCHMARKS = {
+  TOP: 0.5, JG: 0.7, MID: 0.5, ADC: 0.4, SUP: 1.2,
+}
+
+// リコール用アイテムコンポーネント金額の目安
+const RECALL_GOLD_HINTS = [
+  { gold: 3000, label: '完成アイテム' },
+  { gold: 1300, label: 'ロングソード系コンポーネント' },
+  { gold: 1100, label: 'コンポーネント' },
+  { gold: 875, label: 'コンポーネント' },
+]
+
 class RuleEngine {
   constructor() {
     this.lastAlerts = []
@@ -17,6 +30,11 @@ class RuleEngine {
     this.lastCSWarnTime = 0
     this.deathCount = 0
     this.csWarnCount = 0
+    this.lastRecallHintTime = 0
+    this.lastWardWarnTime = 0
+    this.lastNumAdvantageTime = 0
+    this.lastTeamfightKillCount = 0
+    this.lastTeamfightAlertTime = 0
   }
 
   /**
@@ -62,6 +80,26 @@ class RuleEngine {
     // 5. キルストリーク/シャットダウン警告
     const streakAlert = this._checkKillStreak(me, enemies)
     if (streakAlert) alerts.push(streakAlert)
+
+    // 6. タワープレート終了警告 (14:00)
+    const plateAlert = this._checkTowerPlates(gameTime)
+    if (plateAlert) alerts.push(plateAlert)
+
+    // 7. 数的有利アラート
+    const numAlert = this._checkNumericalAdvantage(allies, enemies, gameTime)
+    if (numAlert) alerts.push(numAlert)
+
+    // 8. リコールタイミング
+    const recallAlert = this._checkRecallTiming(gameData, gameTime)
+    if (recallAlert) alerts.push(recallAlert)
+
+    // 9. ワードスコア警告
+    const wardAlert = this._checkWardScore(me, minutes, position)
+    if (wardAlert) alerts.push(wardAlert)
+
+    // 10. 集団戦勝利→プッシュ促し
+    const teamfightAlert = this._checkTeamfightWin(gameData, allies, me, gameTime)
+    if (teamfightAlert) alerts.push(teamfightAlert)
 
     // 優先度でソート (高い方が先)
     alerts.sort((a, b) => b.priority - a.priority)
@@ -286,12 +324,162 @@ class RuleEngine {
     return null
   }
 
+  _checkTowerPlates(gameTime) {
+    const PLATE_END = 840 // 14:00
+    const remaining = PLATE_END - gameTime
+
+    if (remaining <= 60 && remaining > 30) {
+      return {
+        type: 'plate_ending',
+        priority: 5,
+        title: 'プレート消滅まで約1分',
+        desc: 'タワープレートが間もなく消滅。取れるプレートがあれば今のうちに割ろう',
+      }
+    }
+
+    if (remaining <= 30 && remaining > 0) {
+      return {
+        type: 'plate_ending',
+        priority: 6,
+        title: 'プレート消滅間近！',
+        desc: `あと${Math.ceil(remaining)}秒でプレート消滅。ラストチャンスを逃すな`,
+      }
+    }
+
+    return null
+  }
+
+  _checkNumericalAdvantage(allies, enemies, gameTime) {
+    if (gameTime < 180) return null
+
+    // 90秒に1回まで
+    const now = Date.now()
+    if (now - this.lastNumAdvantageTime < 90000) return null
+
+    const deadEnemies = enemies.filter(e => e.isDead)
+    const deadAllies = allies.filter(a => a.isDead)
+    const advantage = deadEnemies.length - deadAllies.length
+
+    if (deadEnemies.length >= 2 && advantage >= 1) {
+      this.lastNumAdvantageTime = now
+      const names = deadEnemies.map(e => e.championName).join('・')
+      return {
+        type: 'numerical_advantage',
+        priority: 8,
+        title: `数的有利！ (${5 - deadEnemies.length}v5)`,
+        desc: `${names}が落ちている。オブジェクトやタワーを狙おう`,
+      }
+    }
+
+    return null
+  }
+
+  _checkRecallTiming(gameData, gameTime) {
+    if (gameTime < 180) return null
+
+    // 90秒に1回まで
+    const now = Date.now()
+    if (now - this.lastRecallHintTime < 90000) return null
+
+    const currentGold = gameData.activePlayer?.currentGold || 0
+    if (currentGold < 875) return null
+
+    // 最も高い買えるコンポーネントを判定
+    const hint = RECALL_GOLD_HINTS.find(h => currentGold >= h.gold)
+    if (!hint) return null
+
+    this.lastRecallHintTime = now
+    return {
+      type: 'recall_timing',
+      priority: 4,
+      title: 'リコールタイミング',
+      desc: `所持ゴールド${currentGold}G — ${hint.label}が購入可能。ウェーブを押してからリコールしよう`,
+    }
+  }
+
+  _checkWardScore(me, minutes, position) {
+    if (minutes < 5) return null
+
+    // 120秒に1回まで
+    const now = Date.now()
+    if (now - this.lastWardWarnTime < 120000) return null
+
+    const wardScore = me.scores?.wardScore || 0
+    const benchmark = WARD_BENCHMARKS[position] || 0.5
+    const expected = benchmark * minutes
+    const ratio = wardScore / expected
+
+    if (ratio < 0.4) {
+      this.lastWardWarnTime = now
+      return {
+        type: 'ward_critical',
+        priority: 5,
+        title: '視界管理が不足',
+        desc: `ワードスコア ${Math.round(wardScore)} (目安: ${Math.round(expected)})。ワードを置いて視界を確保しよう`,
+        warning: '視界がないとガンクや奇襲を防げない',
+      }
+    }
+
+    if (ratio < 0.6) {
+      this.lastWardWarnTime = now
+      return {
+        type: 'ward_warning',
+        priority: 3,
+        title: 'ワードを意識しよう',
+        desc: `ワードスコア ${Math.round(wardScore)} (目安: ${Math.round(expected)})。リコール時やオブジェクト前にワード設置を忘れずに`,
+      }
+    }
+
+    return null
+  }
+
+  _checkTeamfightWin(gameData, allies, me, gameTime) {
+    const events = gameData.events?.Events || []
+    if (events.length === 0) return null
+
+    // 直近30秒以内の味方によるキルを数える
+    const recentWindow = 30
+    const myTeamNames = new Set()
+    if (me) myTeamNames.add(me.summonerName)
+    if (me?.riotIdGameName) myTeamNames.add(me.riotIdGameName)
+    for (const a of allies) {
+      if (a.summonerName) myTeamNames.add(a.summonerName)
+      if (a.riotIdGameName) myTeamNames.add(a.riotIdGameName)
+    }
+
+    const recentAllyKills = events.filter(e =>
+      e.EventName === 'ChampionKill' &&
+      e.EventTime >= gameTime - recentWindow &&
+      myTeamNames.has(e.KillerName)
+    ).length
+
+    // 新たに2キル以上増えた場合にアラート（60秒に1回まで）
+    const now = Date.now()
+    if (recentAllyKills >= 2 && now - this.lastTeamfightAlertTime > 60000) {
+      this.lastTeamfightAlertTime = now
+      return {
+        type: 'teamfight_push',
+        priority: 8,
+        title: '集団戦勝利！タワー/オブジェクトを狙え',
+        desc: `直近${recentWindow}秒で${recentAllyKills}キル獲得。この有利を活かしてタワーかオブジェクトを確保しよう`,
+        warning: 'ジャングルに散らばらず、チームで同じ目標を攻めること',
+      }
+    }
+
+    return null
+  }
+
   reset() {
     this.lastAlerts = []
     this.lastDeathTime = 0
     this.lastCSWarnTime = 0
     this.deathCount = 0
     this.csWarnCount = 0
+    this.lastRecallHintTime = 0
+    this.lastWardWarnTime = 0
+    this.lastNumAdvantageTime = 0
+    this.lastTeamfightKillCount = 0
+    this.lastTeamfightAlertTime = 0
   }
 }
 
