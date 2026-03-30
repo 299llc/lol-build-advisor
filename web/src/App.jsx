@@ -78,7 +78,7 @@ const IconStore = (props) => (
 
 // ---- App Icon ----
 const AppIcon = ({ size = 32 }) => (
-  <img src="/icon.png" alt="ろるさぽくん" width={size} height={size} className="rounded" />
+  <img src={`${import.meta.env.BASE_URL}icon.png`} alt="ろるさぽくん" width={size} height={size} className="rounded" />
 )
 
 // ---- Navbar ----
