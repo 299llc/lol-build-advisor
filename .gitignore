@@ -35,3 +35,4 @@ Desktop.ini
 *.swp
 *.swo
 *~
+.playwright-mcp/
