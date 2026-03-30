@@ -5,7 +5,7 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/lol-build-advisor/',
+  base: '/lolsupkun/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
