@@ -1,0 +1,585 @@
+{
+  "status": "ingame",
+  "gameData": {
+    "gameData": {
+      "gameTime": 1560
+    },
+    "activePlayer": {
+      "summonerName": "TestPlayer"
+    },
+    "players": {
+      "me": {
+        "summonerName": "TestPlayer",
+        "championName": "アッシュ",
+        "enName": "Ashe",
+        "championId": 22,
+        "team": "ORDER",
+        "position": "BOTTOM",
+        "level": 16,
+        "scores": {
+          "kills": 8,
+          "deaths": 3,
+          "assists": 12,
+          "creepScore": 220,
+          "wardScore": 28
+        },
+        "items": [
+          {
+            "itemID": 6672,
+            "displayName": "クラーケン スレイヤー"
+          },
+          {
+            "itemID": 3085,
+            "displayName": "ルナーン ハリケーン"
+          },
+          {
+            "itemID": 3006,
+            "displayName": "バーサーカー ブーツ"
+          },
+          {
+            "itemID": 1038,
+            "displayName": "B.F.ソード"
+          },
+          {
+            "itemID": 3031,
+            "displayName": "インフィニティ エッジ"
+          }
+        ],
+        "flags": []
+      },
+      "allies": [
+        {
+          "summonerName": "Ally1",
+          "championName": "ガレン",
+          "enName": "Garen",
+          "championId": 86,
+          "team": "ORDER",
+          "position": "TOP",
+          "level": 16,
+          "scores": {
+            "kills": 3,
+            "deaths": 3,
+            "assists": 4,
+            "creepScore": 140,
+            "wardScore": 8
+          },
+          "items": [
+            {
+              "itemID": 3078,
+              "displayName": "トリニティフォース"
+            },
+            {
+              "itemID": 3047,
+              "displayName": "プレートスチールキャップ"
+            },
+            {
+              "itemID": 3044,
+              "displayName": "ファージ"
+            }
+          ],
+          "flags": []
+        },
+        {
+          "summonerName": "Ally2",
+          "championName": "リー・シン",
+          "enName": "LeeSin",
+          "championId": 64,
+          "team": "ORDER",
+          "position": "JUNGLE",
+          "level": 15,
+          "scores": {
+            "kills": 4,
+            "deaths": 3,
+            "assists": 6,
+            "creepScore": 95,
+            "wardScore": 22
+          },
+          "items": [
+            {
+              "itemID": 6693,
+              "displayName": "プロウラークロウ"
+            },
+            {
+              "itemID": 3158,
+              "displayName": "アイオニアブーツ"
+            }
+          ],
+          "flags": []
+        },
+        {
+          "summonerName": "Ally3",
+          "championName": "アーリ",
+          "enName": "Ahri",
+          "championId": 103,
+          "team": "ORDER",
+          "position": "MIDDLE",
+          "level": 16,
+          "scores": {
+            "kills": 6,
+            "deaths": 1,
+            "assists": 5,
+            "creepScore": 148,
+            "wardScore": 12
+          },
+          "items": [
+            {
+              "itemID": 6655,
+              "displayName": "ルーデンテンペスト"
+            },
+            {
+              "itemID": 3020,
+              "displayName": "ソーサラーシューズ"
+            },
+            {
+              "itemID": 3916,
+              "displayName": "オブリビオンオーブ"
+            }
+          ],
+          "flags": []
+        },
+        {
+          "summonerName": "Ally4",
+          "championName": "スレッシュ",
+          "enName": "Thresh",
+          "championId": 412,
+          "team": "ORDER",
+          "position": "UTILITY",
+          "level": 13,
+          "scores": {
+            "kills": 0,
+            "deaths": 4,
+            "assists": 14,
+            "creepScore": 18,
+            "wardScore": 38
+          },
+          "items": [
+            {
+              "itemID": 3109,
+              "displayName": "ナイトオブザヴォウ"
+            },
+            {
+              "itemID": 2065,
+              "displayName": "シュレリアの戦歌"
+            }
+          ],
+          "flags": []
+        }
+      ],
+      "enemies": [
+        {
+          "summonerName": "Enemy1",
+          "championName": "ダリウス",
+          "enName": "Darius",
+          "championId": 122,
+          "team": "CHAOS",
+          "position": "TOP",
+          "level": 17,
+          "scores": {
+            "kills": 4,
+            "deaths": 2,
+            "assists": 3,
+            "creepScore": 150,
+            "wardScore": 5
+          },
+          "items": [
+            {
+              "itemID": 6630,
+              "displayName": "ストライドブレイカー"
+            },
+            {
+              "itemID": 3047,
+              "displayName": "プレートスチールキャップ"
+            },
+            {
+              "itemID": 3053,
+              "displayName": "ステラックの篭手"
+            }
+          ],
+          "flags": []
+        },
+        {
+          "summonerName": "Enemy2",
+          "championName": "ヴィ",
+          "enName": "Vi",
+          "championId": 254,
+          "team": "CHAOS",
+          "position": "JUNGLE",
+          "level": 15,
+          "scores": {
+            "kills": 3,
+            "deaths": 4,
+            "assists": 5,
+            "creepScore": 88,
+            "wardScore": 15
+          },
+          "items": [
+            {
+              "itemID": 6631,
+              "displayName": "ディヴァインサンダラー"
+            },
+            {
+              "itemID": 3111,
+              "displayName": "マーキュリーブーツ"
+            }
+          ],
+          "flags": []
+        },
+        {
+          "summonerName": "Enemy3",
+          "championName": "ゼド",
+          "enName": "Zed",
+          "championId": 238,
+          "team": "CHAOS",
+          "position": "MIDDLE",
+          "level": 16,
+          "scores": {
+            "kills": 5,
+            "deaths": 4,
+            "assists": 2,
+            "creepScore": 135,
+            "wardScore": 4
+          },
+          "items": [
+            {
+              "itemID": 6693,
+              "displayName": "プロウラークロウ"
+            },
+            {
+              "itemID": 3158,
+              "displayName": "アイオニアブーツ"
+            },
+            {
+              "itemID": 3134,
+              "displayName": "セレイテッドダーク"
+            }
+          ],
+          "flags": [
+            "assassin"
+          ]
+        },
+        {
+          "summonerName": "Enemy4",
+          "championName": "ジンクス",
+          "enName": "Jinx",
+          "championId": 222,
+          "team": "CHAOS",
+          "position": "BOTTOM",
+          "level": 15,
+          "scores": {
+            "kills": 3,
+            "deaths": 3,
+            "assists": 4,
+            "creepScore": 142,
+            "wardScore": 6
+          },
+          "items": [
+            {
+              "itemID": 6672,
+              "displayName": "クラーケン スレイヤー"
+            },
+            {
+              "itemID": 3006,
+              "displayName": "バーサーカー ブーツ"
+            },
+            {
+              "itemID": 1038,
+              "displayName": "B.F.ソード"
+            }
+          ],
+          "flags": []
+        },
+        {
+          "summonerName": "Enemy5",
+          "championName": "ルル",
+          "enName": "Lulu",
+          "championId": 117,
+          "team": "CHAOS",
+          "position": "UTILITY",
+          "level": 13,
+          "scores": {
+            "kills": 0,
+            "deaths": 5,
+            "assists": 8,
+            "creepScore": 12,
+            "wardScore": 28
+          },
+          "items": [
+            {
+              "itemID": 3504,
+              "displayName": "アーデントセンサー"
+            },
+            {
+              "itemID": 3117,
+              "displayName": "モビリティブーツ"
+            }
+          ],
+          "flags": []
+        }
+      ]
+    },
+    "myTeamSide": "ORDER",
+    "ddragon": "https://ddragon.leagueoflegends.com/cdn/15.6.1",
+    "ended": false
+  },
+  "coreBuild": {
+    "build_goal": [
+      6672,
+      3085,
+      3031,
+      3094,
+      3036
+    ],
+    "build_goal_names": [
+      "クラーケン スレイヤー",
+      "ルナーン ハリケーン",
+      "インフィニティ エッジ",
+      "ラピッドファイアキャノン",
+      "ロード ドミニクス リガード"
+    ],
+    "build_goal_images": [
+      "6672.png",
+      "3085.png",
+      "3031.png",
+      "3094.png",
+      "3036.png"
+    ],
+    "changes": [],
+    "priority": "",
+    "reasoning": "OP.GG統計データに基づくコアビルド",
+    "isCoreBuild": true
+  },
+  "aiSuggestion": {
+    "reasoning": "敵ゼドのアサシン脅威が高く、ストップウォッチ→GA購入を検討。3コア目のIEを完成させた後、防御アイテムを優先。",
+    "recommended": [
+      {
+        "id": 3031,
+        "name": "インフィニティ エッジ",
+        "image": "3031.png",
+        "reason": "3コア目完成でダメージ大幅UP"
+      },
+      {
+        "id": 3026,
+        "name": "ガーディアンエンジェル",
+        "image": "3026.png",
+        "reason": "ゼドのバースト対策"
+      }
+    ],
+    "gameTime": 1080,
+    "totalCalls": 5,
+    "history": {
+      "3026": {
+        "count": 4,
+        "lastReason": "ゼドのバースト対策"
+      },
+      "3031": {
+        "count": 5,
+        "lastReason": "3コア目完成でダメージ大幅UP"
+      },
+      "3036": {
+        "count": 1,
+        "lastReason": "タンク対策"
+      },
+      "3094": {
+        "count": 2,
+        "lastReason": "射程優位を活かす"
+      },
+      "3156": {
+        "count": 3,
+        "lastReason": "AP脅威への保険"
+      }
+    }
+  },
+  "substituteItems": [
+    {
+      "id": 3031,
+      "name": "インフィニティ エッジ",
+      "image": "3031.png"
+    },
+    {
+      "id": 3094,
+      "name": "ラピッドファイアキャノン",
+      "image": "3094.png"
+    },
+    {
+      "id": 3036,
+      "name": "ロード ドミニクス リガード",
+      "image": "3036.png"
+    },
+    {
+      "id": 3026,
+      "name": "ガーディアンエンジェル",
+      "image": "3026.png"
+    },
+    {
+      "id": 3156,
+      "name": "マルモティウスの胃袋",
+      "image": "3156.png"
+    },
+    {
+      "id": 3139,
+      "name": "マーキュリアル シミター",
+      "image": "3139.png"
+    },
+    {
+      "id": 3046,
+      "name": "ファントムダンサー",
+      "image": "3046.png"
+    },
+    {
+      "id": 6676,
+      "name": "ザ コレクター",
+      "image": "6676.png"
+    }
+  ],
+  "matchupTip": {
+    "opponent": "イラオイ",
+    "summary": "グラガス対イラオイは、イラオイのスキルを避けることができれば五分、そうでなければ不利なマッチアップです。",
+    "tips": [
+      "イラオイの「魂の試練(E)」を避けることを最優先にしましょう。当たってしまったら、すぐに「ボディスラム(E)」で距離を取るか、魂を破壊されないように立ち位置を調整してください。",
+      "イラオイの「旧神の預言者(パッシブ)」で生成される触手は、「タル転がし(Q)」や通常攻撃で積極的に破壊し、イラオイの回復源とダメージ源を減らしましょう。",
+      "イラオイが「信仰震(R)」を発動したら、すぐに「ワシの奢りじゃ！(R)」でイラオイを触手の範囲外にノックバックさせるか、「ボディスラム(E)」でスタンさせて距離を取り、ファイトを中断させましょう。",
+      "「飲みすぎ注意(W)」のダメージ軽減効果を、イラオイの「過酷なる教訓(W)」や「触手の鉄槌(Q)」のダメージに合わせて使い、被ダメージを抑えましょう。",
+      "レーンをプッシュしすぎず、イラオイがタワー下で安全にファームできるようにしないようにしましょう。フリーズを意識し、ガンクを呼びやすい状況を作りましょう。"
+    ],
+    "playstyle": "イラオイの「魂の試練(E)」を避けつつ、遠距離から「タル転がし(Q)」でハラスし、触手を破壊するポーク＆ディスエンゲージスタイルで戦いましょう。イラオイのオールインをいなし、ガンクを誘って有利を作るのが勝ち筋です。",
+    "danger": "最も警戒すべきはイラオイの「魂の試練(E)」です。これに当たると一方的にハラスされ、回復されてしまうため、常にミニオンの裏に隠れるか、横移動で避ける意識を持ちましょう。",
+    "power_spike": "イラオイはLv2で「過酷なる教訓(W)」を習得するとトレードが強力になり、Lv6で「信仰震(R)」を習得するとオールイン能力が大幅に向上します。また、1-2アイテム完成時も非常に強力になります。"
+  },
+  "macroAdvice": {
+    "title": "ドラゴン確保",
+    "desc": "味方と合流してドラゴンを確保する",
+    "reason": "味方が数的有利でドラゴンが取得可能",
+    "steps": [
+      "BOTウェーブをプッシュ",
+      "リバーにワード設置",
+      "ドラゴンピットへ移動"
+    ],
+    "warning": "ゼドのローム警戒",
+    "gameTime": 1080
+  },
+  "champSelectExtras": {
+    "skills": {
+      "order": [
+        "W",
+        "Q",
+        "E"
+      ],
+      "pickRate": 0.52
+    }
+  },
+  "ruleAlerts": [
+    {
+      "type": "numerical_advantage",
+      "priority": 8,
+      "title": "数的有利！ (3v5)",
+      "desc": "ゼド・ダリウスが落ちている。オブジェクトやタワーを狙おう"
+    },
+    {
+      "type": "obj_now_ドラゴン",
+      "priority": 7,
+      "title": "ドラゴン周辺に集結",
+      "desc": "ドラゴンまで25秒。スイーパーで視界を除去しよう"
+    },
+    {
+      "type": "plate_ending",
+      "priority": 6,
+      "title": "プレート消滅間近！",
+      "desc": "あと28秒でプレート消滅。ラストチャンスを逃すな"
+    },
+    {
+      "type": "death",
+      "priority": 6,
+      "title": "デス後の立て直し",
+      "desc": "リスポーン後はウェーブ回収から。焦ってファイトに行かないこと",
+      "warning": "ゼドが育っている (5キル)。単独で戦わないこと"
+    },
+    {
+      "type": "cs_critical",
+      "priority": 7,
+      "title": "CS改善が急務",
+      "desc": "CS 85 / 144目安 (59%)。ミニオンを逃さないよう意識しよう",
+      "warning": "CSが低いとアイテム差が開き、戦闘で不利になる"
+    },
+    {
+      "type": "cs_warning",
+      "priority": 4,
+      "title": "CS意識",
+      "desc": "CS 105 / 144目安。サイドウェーブを回収しよう"
+    },
+    {
+      "type": "enemy_fed",
+      "priority": 5,
+      "title": "育った敵に警戒",
+      "desc": "ゼド(5キル)。集団で対処し、単独では戦わないこと",
+      "warning": "ストップウォッチの購入を検討"
+    },
+    {
+      "type": "level_disadvantage",
+      "priority": 5,
+      "title": "レベル差に注意",
+      "desc": "Lv11 (敵平均Lv13)。ファームでレベル差を縮めよう",
+      "warning": "レベル差がある状態での1v1は避けること"
+    },
+    {
+      "type": "level_advantage",
+      "priority": 3,
+      "title": "レベル有利を活かそう",
+      "desc": "Lv14 (敵平均Lv12)。レベル差がある今、積極的に仕掛けよう"
+    },
+    {
+      "type": "fed_warning",
+      "priority": 4,
+      "title": "シャットダウンに注意",
+      "desc": "5キル中。デスするとシャットダウンゴールドを渡してしまう。無駄なリスクを避けよう"
+    },
+    {
+      "type": "recall_timing",
+      "priority": 4,
+      "title": "リコールタイミング",
+      "desc": "所持ゴールド1350G — コンポーネントが購入可能。ウェーブを押してからリコールしよう"
+    },
+    {
+      "type": "ward_critical",
+      "priority": 5,
+      "title": "視界管理が不足",
+      "desc": "ワードスコア 5 (目安: 14)。ワードを置いて視界を確保しよう",
+      "warning": "視界がないとガンクや奇襲を防げない"
+    },
+    {
+      "type": "ward_warning",
+      "priority": 3,
+      "title": "ワードを意識しよう",
+      "desc": "ワードスコア 8 (目安: 14)。リコール時やオブジェクト前にワード設置を忘れずに"
+    },
+    {
+      "type": "teamfight_push",
+      "priority": 8,
+      "title": "集団戦勝利！タワー/オブジェクトを狙え",
+      "desc": "直近30秒で3キル獲得。この有利を活かしてタワーかオブジェクトを確保しよう",
+      "warning": "ジャングルに散らばらず、チームで同じ目標を攻めること"
+    }
+  ],
+  "teamStrategy": {
+    "_phase": "late",
+    "win_condition": "味方にはガレンのフロントラインとスレッシュのエンゲージがあり、アッシュ+アーリの火力が十分です。5v5の集団戦で正面から戦えば有利です。スプリットは避け、チームで固まって動きましょう。",
+    "teamfight": "スレッシュのフックまたはガレンのフラッシュ+Qでエンゲージ。リー・シンがゼドのバックラインへのアクセスをキックで妨害。アーリとアッシュは後方からDPSを出し、ジンクスを最優先でフォーカスしてください。",
+    "your_role": "アッシュは集団戦で最も後ろに立ち、ゼドのultを受けたらすぐにフラッシュで逃げてください。スレッシュのランタンの範囲内に常にいること。ultは敵エンゲージャーのヴィに当てて味方を守りましょう。",
+    "closing": "バロンが取得可能です。集団戦に勝ったらバロンを取り、バロンバフでBOT側のインヒビターを割りに行きましょう。スーパーミニオンのプレッシャーで敵を分散させ、残りのタワーを折りましょう。",
+    "watch_out": "ゼド(8キル)のバーストが脅威です。集団戦でゼドが影分身でバックラインに飛んできたら、スレッシュのフレイで剥がしてもらうか、ガーディアンエンジェルの復活で耐えてください。"
+  },
+  "objectivesStatus": {
+    "dragon": "ドラゴン: 2体討伐 (スポーン済み・取得可能)",
+    "baron": "バロン: スポーン済み・取得可能",
+    "voidgrub": "ヴォイドグラブ: 終了 (3体討伐)",
+    "herald": "ヘラルド: スポーン済み・取得可能",
+    "gameTime": 1560,
+    "debug": {
+      "GameStart": 1,
+      "MinionsSpawning": 1,
+      "ChampionKill": 15,
+      "DragonKill": 2,
+      "HordeKill": 3,
+      "TurretKilled": 4
+    }
+  }
+}

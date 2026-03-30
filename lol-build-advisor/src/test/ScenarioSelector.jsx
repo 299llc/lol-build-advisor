@@ -5,6 +5,7 @@ const SCENARIO_LABELS = {
   'champselect': 'チャンプセレクト',
   'ingame-early': '試合序盤 (6分)',
   'ingame-mid': '試合中盤 (18分)',
+  'ingame-late': '試合終盤 (26分)',
   'ended': '試合終了',
   'position-select': 'ポジション選択',
 }

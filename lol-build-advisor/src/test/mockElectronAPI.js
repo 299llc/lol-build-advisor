@@ -54,6 +54,8 @@ function loadScenario(name) {
   emit('champselect:extras', null)
   emit('objectives:status', null)
   emit('rule:alerts', [])
+  emit('strategy:team', null)
+  emit('strategy:loading', false)
 
   // シナリオデータを順次発火（少し遅延を入れてReactに反映させる）
   setTimeout(() => {
@@ -75,6 +77,7 @@ function loadScenario(name) {
     if (s.champSelectExtras) emit('champselect:extras', s.champSelectExtras)
     if (s.objectivesStatus) emit('objectives:status', s.objectivesStatus)
     if (s.ruleAlerts) emit('rule:alerts', s.ruleAlerts)
+    if (s.teamStrategy) emit('strategy:team', s.teamStrategy)
   }, 50)
 }
 
@@ -133,6 +136,9 @@ const mockAPI = {
   onMacroLoading: (cb) => on('macro:loading', cb),
   onObjectivesStatus: (cb) => on('objectives:status', cb),
   onRuleAlerts: (cb) => on('rule:alerts', cb),
+  onTeamStrategy: (cb) => on('strategy:team', cb),
+  onTeamStrategyLoading: (cb) => on('strategy:loading', cb),
+  onChampSelectMeta: (cb) => on('champselect:meta', cb),
 
   // コンパクトビュー（ブラウザモードでは何もしない）
   openCompactView: () => Promise.resolve(),
