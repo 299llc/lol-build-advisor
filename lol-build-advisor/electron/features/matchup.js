@@ -2,7 +2,7 @@
 // main.js から切り出した handleMatchupTip, handleMatchupItems,
 // findLaneOpponent, injectCounterItems, buildFallbackSubstituteItems, useFallbackSubstituteItems
 
-const { getItemById, getSpells, getChampionById } = require('../api/patchData')
+const { getItemById, getSpells } = require('../api/patchData')
 const { fetchMatchupItems, fetchMatchupWinRate } = require('../api/opggClient')
 const { isCompletedItem } = require('../core/config')
 
@@ -270,57 +270,14 @@ function handleTeamStrategy(gameData, me, allies, enemies) {
   }
 }
 
-function _getJaName(player) {
-  if (player.jaName) return player.jaName
-  const info = getChampionById(player.championId || 0)
-  return info?.jaName || player.enName || player.championName || 'Unknown'
-}
-
 function _fetchStrategy(gameData, me, allies, enemies, phase) {
   if (!state.aiClient || !state.aiEnabled || !state.currentMatchAiAllowed) return
+  if (!state.preprocessor || !state.currentGameState) return
 
-  const posToRole = { TOP: 'TOP', JUNGLE: 'JG', MIDDLE: 'MID', BOTTOM: 'ADC', UTILITY: 'SUP' }
-  const myRole = posToRole[me.position] || me.position
+  const input = state.preprocessor.buildStrategyInput(state.currentGameState, phase)
+  if (!input) return
 
-  const allyTeam = (allies || []).map(p => ({
-    champion: _getJaName(p),
-    role: posToRole[p.position] || p.position,
-    level: p.level || 0,
-    kda: `${p.scores?.kills || 0}/${p.scores?.deaths || 0}/${p.scores?.assists || 0}`,
-    items: (p.items || []).filter(i => i.itemID > 0).length,
-    status: (p.scores?.kills || 0) >= 5 ? 'fed' : (p.scores?.deaths || 0) >= 5 ? 'behind' : 'normal',
-  }))
-
-  const enemyTeam = (enemies || []).map(p => ({
-    champion: _getJaName(p),
-    role: posToRole[p.position] || p.position,
-    level: p.level || 0,
-    kda: `${p.scores?.kills || 0}/${p.scores?.deaths || 0}/${p.scores?.assists || 0}`,
-    items: (p.items || []).filter(i => i.itemID > 0).length,
-    status: (p.scores?.kills || 0) >= 5 ? 'fed' : (p.scores?.deaths || 0) >= 5 ? 'behind' : 'normal',
-  }))
-
-  const allyKills = allies.reduce((s, p) => s + (p.scores?.kills || 0), 0)
-  const enemyKills = enemies.reduce((s, p) => s + (p.scores?.kills || 0), 0)
-  const killDiff = allyKills - enemyKills
-  const situation = killDiff >= 5 ? 'ahead' : killDiff <= -5 ? 'behind' : 'even'
-
-  const enemyThreats = enemies
-    .filter(p => (p.scores?.kills || 0) >= 4)
-    .map(p => ({ champion: _getJaName(p), kills: p.scores?.kills, deaths: p.scores?.deaths }))
-
-  const input = {
-    phase,
-    game_time: Math.floor(gameData.gameData?.gameTime || 0),
-    me: { champion: _getJaName(me), role: myRole },
-    ally_team: allyTeam,
-    enemy_team: enemyTeam,
-    kill_diff: killDiff,
-    situation,
-    enemy_threats: enemyThreats,
-  }
-
-  console.log(`[Strategy] Fetching ${phase} strategy (t=${input.game_time}s, ${situation})`)
+  console.log(`[Strategy] Fetching ${phase} strategy (t=${input.game_time}s, ${input.situation})`)
   broadcast('strategy:loading', true)
 
   state.aiClient.getTeamStrategy(input, phase).then(result => {

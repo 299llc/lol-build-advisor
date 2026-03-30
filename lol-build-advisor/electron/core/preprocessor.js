@@ -992,6 +992,38 @@ class Preprocessor {
 
   // === リセット ===
 
+  buildStrategyInput(gameState, phase) {
+    if (!gameState) return null
+    const { me, allies, enemies, killDiff, situation, objectives, ally, enemy, gameTime } = gameState
+
+    const buildTeamMember = (p) => ({
+      champion: p.champion,
+      role: p.position,
+      level: p.level,
+      kda: Array.isArray(p.kda) ? p.kda.join('/') : '0/0/0',
+      items: Array.isArray(p.items) ? p.items.length : 0,
+      status: p.status || 'normal',
+    })
+
+    return {
+      phase,
+      game_time: Math.floor(gameTime || 0),
+      me: { champion: me.champion, role: me.position },
+      ally_team: (allies || []).map(buildTeamMember),
+      enemy_team: (enemies || []).map(buildTeamMember),
+      kill_diff: killDiff || 0,
+      situation: situation || 'even',
+      enemy_threats: (enemy?.threats || []).map(t => ({
+        champion: t.champion,
+        reason: t.reason,
+        level: t.level,
+      })),
+      objectives: objectives || {},
+      ally_composition: ally?.composition || 'unknown',
+      enemy_composition: enemy?.composition || 'unknown',
+    }
+  }
+
   reset() {
     this.previousItemAdvice = null
     this.previousMacroAdvice = null
