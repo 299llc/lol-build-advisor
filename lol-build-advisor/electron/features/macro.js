@@ -155,7 +155,7 @@ async function requestMacroAdvice(gameData, me, allies, enemies, eventTrigger = 
     } else {
       // フォールバック: ruleEngineのアラートを使用
       const position = state.aiClient?.position || 'MID'
-      const ruleAlerts = state.ruleEngine ? state.ruleEngine.evaluate(gameData, position) : []
+      const ruleAlerts = state.ruleEngine ? state.ruleEngine.evaluate(gameData, position, state.aiClient?.rank) : []
       if (ruleAlerts.length > 0) {
         const top = ruleAlerts[0]
         const fallback = buildMacroFallbackPayload(top, gameTime, eventTrigger)

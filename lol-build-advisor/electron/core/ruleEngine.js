@@ -4,13 +4,33 @@
  * ローカルLLM が遅い場合のフォールバック＋補完として機能
  */
 const { OBJECTIVES, classifyObjectiveEvents } = require('./config')
+const { RANK_BENCHMARKS } = require('./knowledge/rank')
 
-// CS 基準値 (分あたり): Bronze〜Gold帯の目安
-const CS_BENCHMARKS = {
-  TOP: 7.0, JG: 5.5, MID: 7.5, ADC: 8.0, SUP: 1.0,
+// ランク別CS基準値を取得
+function getCsBenchmark(position, rank) {
+  const posKey = { TOP: 'top', JG: 'jg', JUNGLE: 'jg', MID: 'mid', MIDDLE: 'mid', ADC: 'adc', BOTTOM: 'adc', SUP: 'sup', UTILITY: 'sup' }[position] || 'mid'
+  if (rank && RANK_BENCHMARKS[rank]) {
+    return RANK_BENCHMARKS[rank][posKey] || 6.0
+  }
+  // デフォルト: Gold帯
+  return { top: 5.3, jg: 5.0, mid: 5.0, adc: 5.8, sup: 1.0 }[posKey] || 6.0
 }
 
-// ワードスコア基準値 (分あたり)
+// ランク別ワード基準値を取得
+function getWardBenchmark(position, rank) {
+  const posKey = { TOP: 'top', JG: 'jg', JUNGLE: 'jg', MID: 'mid', MIDDLE: 'mid', ADC: 'adc', BOTTOM: 'adc', SUP: 'sup', UTILITY: 'sup' }[position] || 'mid'
+  // ランクが低いほど基準を緩くする
+  const rankMultiplier = { IRON: 0.5, BRONZE: 0.6, SILVER: 0.7, GOLD: 0.8, PLATINUM: 0.9, EMERALD: 1.0, DIAMOND: 1.0, MASTER: 1.1, GRANDMASTER: 1.1, CHALLENGER: 1.1 }
+  const base = { top: 0.5, jg: 0.7, mid: 0.5, adc: 0.4, sup: 1.2 }[posKey] || 0.5
+  const mult = (rank && rankMultiplier[rank]) || 0.8
+  return base * mult
+}
+
+// 後方互換用（定数として残す）
+const CS_BENCHMARKS = {
+  TOP: 5.3, JG: 5.0, MID: 5.0, ADC: 5.8, SUP: 1.0,
+}
+
 const WARD_BENCHMARKS = {
   TOP: 0.5, JG: 0.7, MID: 0.5, ADC: 0.4, SUP: 1.2,
 }
@@ -60,7 +80,7 @@ class RuleEngine {
    * @param {string} position - TOP/JG/MID/ADC/SUP
    * @returns {Array<{type: string, priority: number, title: string, desc: string, warning?: string}>}
    */
-  evaluate(gameData, position) {
+  evaluate(gameData, position, rank) {
     const alerts = []
     const gameTime = gameData.gameData?.gameTime || 0
     const minutes = gameTime / 60
@@ -78,8 +98,8 @@ class RuleEngine {
     const allies = allPlayers.filter(p => p.team === myTeam && p !== me)
     const enemies = allPlayers.filter(p => p.team !== myTeam)
 
-    // 1. CS 監視
-    const csAlert = this._checkCS(me, minutes, position)
+    // 1. CS 監視（ランク別基準）
+    const csAlert = this._checkCS(me, minutes, position, rank)
     if (csAlert) alerts.push(csAlert)
 
     // 2. オブジェクトタイマーアラート
@@ -141,12 +161,12 @@ class RuleEngine {
     return activeAlerts
   }
 
-  _checkCS(me, minutes, position) {
+  _checkCS(me, minutes, position, rank) {
     if (position === 'SUP' || position === 'UTILITY') return null // サポートはCS不要
     if (minutes < 3) return null // 序盤はスキップ
 
     const cs = me.scores?.creepScore || 0
-    const benchmark = CS_BENCHMARKS[position] || 7.0
+    const benchmark = getCsBenchmark(position, rank)
     const expectedCS = benchmark * minutes
     const ratio = cs / expectedCS
 

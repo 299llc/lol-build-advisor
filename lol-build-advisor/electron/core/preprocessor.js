@@ -185,7 +185,10 @@ class Preprocessor {
     this.previousMacroAdvice = null
     this.gameLog = []
     this.lastSnapshotTime = 0
+    this._rank = null
   }
+
+  setRank(rank) { this._rank = rank }
 
   // === GameState構築 ===
 
@@ -941,7 +944,9 @@ class Preprocessor {
       // 対面チャンプ（最終状態）
       lane_opponent: laneOpp
         ? { champion: laneOpp.champion, kda: laneOpp.kda, level: laneOpp.level, items: laneOpp.items.map(i => i.name) }
-        : null
+        : null,
+      // プレイヤーランク（ランク別評価基準用）
+      player_rank: this._rank || null
     }
   }
 

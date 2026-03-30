@@ -716,6 +716,7 @@ function setupIPC() {
   // ランク設定（手動）
   ipcMain.handle('player:set-rank', async (_, rank) => {
     if (state.aiClient) state.aiClient.setRank(rank)
+    if (state.preprocessor) state.preprocessor.setRank(rank)
     // 永続化
     const fs = require('fs')
     const path = require('path')
@@ -1304,6 +1305,7 @@ async function handleGameData(gameData) {
           const tier = await state.lcuClient.getSoloRankTier()
           if (tier) {
             state.aiClient.setRank(tier)
+            if (state.preprocessor) state.preprocessor.setRank(tier)
             console.log(`[Rank] Player rank: ${tier}`)
           }
         } catch { /* LCU接続失敗 → ランクなしで続行 */ }
@@ -1457,7 +1459,7 @@ async function handleGameData(gameData) {
 
   // ルールベースアラート (LLM不要)
   if (state.ruleEngine) {
-    const ruleAlerts = state.ruleEngine.evaluate(gameData, resolvedPosition)
+    const ruleAlerts = state.ruleEngine.evaluate(gameData, resolvedPosition, state.aiClient?.rank)
     broadcast('rule:alerts', ruleAlerts)
   }
 
