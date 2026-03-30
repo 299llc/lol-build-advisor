@@ -1,6 +1,6 @@
 {
   "name": "lol-build-advisor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "LoL リアルタイムビルド提案デスクトップアプリ",
   "author": "299LLC",
   "main": "electron/main.js",
@@ -50,9 +50,9 @@
       "icon": "build/icon.png"
     },
     "appx": {
-      "identityName": "299LLC.LolSapoKun",
-      "publisher": "CN=299LLC-TEST",
-      "publisherDisplayName": "299LLC",
+      "identityName": "299llc.57013579CA1AF",
+      "publisher": "CN=D4BE4903-C155-4E17-95BD-B6E5E113EBD7",
+      "publisherDisplayName": "299 llc.",
       "applicationId": "LolBuildAdvisor",
       "displayName": "ろるさぽくん",
       "languages": ["ja-JP"],
