@@ -13,7 +13,7 @@ function init(stateRef, broadcastFn, deps = {}) {
   saveLastGame = deps.saveLastGame || (() => {})
 }
 
-async function requestCoaching(snapshot, macroHistorySummary = null) {
+async function requestCoaching(snapshot, macroHistorySummary = null, preserved = {}) {
   if (!state.aiClient || !snapshot || !state.currentMatchAiAllowed) return
 
   const { players, gameData: gd } = snapshot
@@ -24,20 +24,23 @@ async function requestCoaching(snapshot, macroHistorySummary = null) {
   broadcast('coaching:loading', true)
 
   try {
-    // GameStateが残っていなければsnapshotから再構築
-    const gameState = state.currentGameState || state.preprocessor.buildGameState(
+    // イベント取得（snapshot.events > gd.events > cachedEvents の順でフォールバック）
+    const events = snapshot.events?.Events || gd?.events?.Events || state.cachedEvents || []
+
+    // リセット前に保存されたgameState/gameLogを優先使用
+    const gameState = preserved.gameState || state.currentGameState || state.preprocessor.buildGameState(
       { activePlayer: snapshot.activePlayer, allPlayers: snapshot.allPlayers || [me, ...(players.allies || []), ...(players.enemies || [])], gameData: gd },
-      gd?.events?.Events || [],
+      events,
       { spectatorSelectedName: state.spectatorSelectedName || null }
     )
+    const gameLog = preserved.gameLog || state.preprocessor.gameLog
 
-    const events = gd?.events?.Events || []
     const coreBuild = state.currentCoreBuild
       ? state.currentCoreBuild.ids.map((id, i) => ({ id, name: state.currentCoreBuild.names[i] }))
       : []
 
     // 前処理: 構造化入力を生成
-    const structuredInput = state.preprocessor.buildCoachingInput(gameState, state.preprocessor.gameLog, coreBuild, events)
+    const structuredInput = state.preprocessor.buildCoachingInput(gameState, gameLog, coreBuild, events)
     structuredInput.macro_advice_history_summary = macroFeature
       ? (macroHistorySummary || macroFeature.summarizeMacroAdviceHistory())
       : []

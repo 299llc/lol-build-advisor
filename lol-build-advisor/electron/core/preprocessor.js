@@ -852,6 +852,56 @@ class Preprocessor {
       voidgrub: objectiveEvents.voidgrub.length
     }
 
+    // 敵全員の最終ビルド・KDA
+    const enemyBuilds = gameState.enemies.map(e => ({
+      champion: e.champion,
+      role: normalizePosition(e.position),
+      kda: e.kda,
+      items: e.items.map(i => i.name),
+    }))
+
+    // 味方全員のKDA・アイテム
+    const allyStats = gameState.allies.map(a => ({
+      champion: a.champion,
+      role: normalizePosition(a.position),
+      kda: a.kda,
+      items: a.items.map(i => i.name),
+    }))
+
+    // ゴールド推移・キル差推移（スナップショットから）
+    const goldTimeline = gameLog
+      .filter(s => s.gold !== undefined)
+      .map(s => ({ time: s.timestamp, gold: s.gold, killDiff: s.killDiff }))
+
+    // デスタイミング検出（KDA推移の差分から）
+    const deathTimings = []
+    for (let i = 1; i < gameLog.length; i++) {
+      const prevDeaths = gameLog[i - 1].kda[1]
+      const currDeaths = gameLog[i].kda[1]
+      if (currDeaths > prevDeaths) {
+        deathTimings.push({
+          time: gameLog[i].timestamp,
+          phase: getGamePhase(gameLog[i].timestamp),
+        })
+      }
+    }
+
+    // 対面との比較推移（スナップショットから）
+    const laneComparison = gameLog
+      .filter(s => s.laneOpponent)
+      .map(s => ({
+        time: s.timestamp,
+        myLevel: s.level,
+        oppLevel: s.laneOpponent.level,
+        myCs: s.cs,
+        oppKda: s.laneOpponent.kda,
+        myKda: s.kda,
+      }))
+
+    // 対面チャンプ（同ロールの敵） — 最終状態
+    const myPos = gameState.me.position
+    const laneOpp = gameState.enemies.find(e => normalizePosition(e.position) === myPos)
+
     return {
       me: {
         champion: gameState.me.champion,
@@ -878,12 +928,20 @@ class Preprocessor {
       enemy_healer_count: gameState.enemy.healerCount,
       ally_composition: gameState.ally.composition,
       enemy_composition: gameState.enemy.composition,
-      // 対面チャンプ（同ロールの敵）
-      lane_opponent: (() => {
-        const myPos = gameState.me.position
-        const opp = gameState.enemies.find(e => normalizePosition(e.position) === myPos)
-        return opp ? { champion: opp.champion, kda: opp.kda, level: opp.level } : null
-      })()
+      // 敵全員の最終ビルド・KDA
+      enemy_builds: enemyBuilds,
+      // 味方全員のKDA・アイテム
+      ally_stats: allyStats,
+      // ゴールド推移（60秒間隔のスナップショット）
+      gold_timeline: goldTimeline,
+      // デスタイミング（いつ・どのフェーズで死んだか）
+      death_timings: deathTimings,
+      // 対面との比較推移（レベル差・CS差・KDA）
+      lane_comparison: laneComparison,
+      // 対面チャンプ（最終状態）
+      lane_opponent: laneOpp
+        ? { champion: laneOpp.champion, kda: laneOpp.kda, level: laneOpp.level, items: laneOpp.items.map(i => i.name) }
+        : null
     }
   }
 
@@ -897,13 +955,34 @@ class Preprocessor {
   recordSnapshot(gameState, gameTimeSec) {
     if (gameTimeSec - this.lastSnapshotTime < 60) return
     this.lastSnapshotTime = gameTimeSec
-    this.gameLog.push({
+
+    // 対面チャンプを特定
+    const myPos = gameState.me.position
+    const opp = gameState.enemies.find(e => normalizePosition(e.position) === myPos)
+
+    const snap = {
       timestamp: gameTimeSec,
       kda: [...gameState.me.kda],
       cs: gameState.me.cs,
       items: gameState.me.items.map(i => ({ id: i.id, name: i.name })),
-      level: gameState.me.level
-    })
+      level: gameState.me.level,
+      gold: gameState.me.gold || 0,
+      killDiff: gameState.killDiff,
+      situation: gameState.situation,
+    }
+
+    // 対面情報（存在する場合）
+    if (opp) {
+      snap.laneOpponent = {
+        champion: opp.champion,
+        level: opp.level,
+        kda: [...opp.kda],
+        items: opp.items.map(i => ({ id: i.id, name: i.name })),
+        estimatedGold: opp.estimatedGold || 0,
+      }
+    }
+
+    this.gameLog.push(snap)
   }
 
   // === 前回出力の保存 ===

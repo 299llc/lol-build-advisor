@@ -1,3 +1,7 @@
 {
-  "score_range": [4, 8]
+  "score_range": [4, 8],
+  "rules": [
+    { "type": "game_duration_aware" },
+    { "type": "must_mention_keyword", "keywords": ["ゾーニャ"], "in": ["sections", "good_points", "improve_points"], "reason": "Ahriがゾーニャを購入している" }
+  ]
 }

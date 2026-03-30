@@ -144,6 +144,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   compactClose: () => ipcRenderer.send('compact:close'),
   compactSetPassthrough: (enabled) => ipcRenderer.send('compact:set-passthrough', enabled),
 
+  // オーバーレイ自動表示設定
+  getAutoOverlay: () => ipcRenderer.invoke('setting:autoOverlay:get'),
+  setAutoOverlay: (enabled) => ipcRenderer.invoke('setting:autoOverlay:set', enabled),
+
   // 前回試合結果
   getLastGame: () => ipcRenderer.invoke('lastgame:get'),
 

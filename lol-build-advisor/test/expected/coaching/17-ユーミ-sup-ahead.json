@@ -1,0 +1,32 @@
+{
+  "score_range": [
+    1,
+    10
+  ],
+  "rules": [
+    {
+      "type": "must_not_recommend_grievous_when_no_healers"
+    },
+    {
+      "type": "must_respect_damage_profile"
+    },
+    {
+      "type": "must_not_criticize_role_item",
+      "role": "SUP",
+      "items": [
+        "至点のソリ",
+        "ルーニック コンパス",
+        "ブラッドソング",
+        "ドリーム メーカー"
+      ]
+    },
+    {
+      "type": "game_duration_aware"
+    },
+    {
+      "type": "score_consistency"
+    }
+  ],
+  "_auto_generated": true,
+  "_source_session": "session_2026-03-21_15-58-02.json"
+}

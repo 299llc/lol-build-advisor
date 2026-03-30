@@ -16,10 +16,13 @@
     "test:ai": "node test/harness/runner.js",
     "test:ai:bedrock": "node test/harness/runner.js --provider bedrock",
     "test:ai:anthropic": "node test/harness/runner.js --provider anthropic",
-    "test:ai:verbose": "node test/harness/runner.js --verbose"
+    "test:ai:verbose": "node test/harness/runner.js --verbose",
+    "test:coaching:gen": "node test/harness/generate-coaching-fixtures.js",
+    "test:coaching:list": "node test/harness/generate-coaching-fixtures.js --list",
+    "test:coaching:validate": "node test/harness/runner.js --type coaching --validate-only",
+    "test:coaching": "node test/harness/runner.js --type coaching --verbose"
   },
   "dependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "clsx": "^2.1.0",
     "league-connect": "^5.5.0",
     "lucide-react": "^0.468.0",

@@ -86,6 +86,17 @@ export function MatchupTip({ tip, loading, laningOver = false }) {
       {/* コンテンツ */}
       {tip && expanded && (
         <div style={{ padding: '0 12px 10px', fontSize: 12, lineHeight: 1.6, color: '#ccc', userSelect: 'text', cursor: 'text', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+          {/* Power Curve (統計ベース) */}
+          {tip.power_curve && <PowerCurveBar powerCurve={tip.power_curve} />}
+
+          {/* Power Spike (AIテキスト) */}
+          {tip.power_spike && (
+            <p style={{ margin: '0 0 6px', color: 'rgba(200,170,110,0.9)' }}>
+              {!tip.power_curve && <span style={{ fontWeight: 'bold' }}>⚡ パワースパイク </span>}
+              {tip.power_spike}
+            </p>
+          )}
+
           {/* Summary */}
           {tip.summary && <p style={{ margin: '0 0 6px' }}>{tip.summary}</p>}
 
@@ -115,17 +126,6 @@ export function MatchupTip({ tip, loading, laningOver = false }) {
           {tip.danger && (
             <p style={{ margin: '0 0 4px', color: 'rgba(232,64,87,0.9)' }}>
               <span style={{ fontWeight: 'bold' }}>⚠ 警戒</span> {tip.danger}
-            </p>
-          )}
-
-          {/* Power Curve (統計ベース) */}
-          {tip.power_curve && <PowerCurveBar powerCurve={tip.power_curve} />}
-
-          {/* Power Spike (AIテキスト) */}
-          {tip.power_spike && (
-            <p style={{ margin: 0, color: 'rgba(200,170,110,0.9)' }}>
-              {!tip.power_curve && <span style={{ fontWeight: 'bold' }}>⚡ パワースパイク </span>}
-              {tip.power_spike}
             </p>
           )}
         </div>

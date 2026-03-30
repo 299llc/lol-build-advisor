@@ -35,8 +35,10 @@ function detectFlags(enName, championId, scores) {
 
     const spells = getSpells(enName)
     if (spells) {
-      const allText = [spells.passive.desc, ...spells.spells.map(s => s.desc)].join(' ')
-      if (hasHeal(allText)) staticFlags.push('healer')
+      // healer判定はスキルごとに個別チェック（全文結合だとANTI_HEAL_REGEXが誤マッチする）
+      const texts = [spells.passive.desc, ...spells.spells.map(s => s.desc)]
+      if (texts.some(t => hasHeal(t))) staticFlags.push('healer')
+      const allText = texts.join(' ')
       if (CC_REGEX.test(allText)) staticFlags.push('cc')
       if (SHIELD_REGEX.test(allText)) staticFlags.push('shield')
     }

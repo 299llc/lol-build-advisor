@@ -19,6 +19,7 @@ const { BedrockProvider } = require('../../electron/api/providers/bedrockProvide
 const { AnthropicProvider } = require('../../electron/api/providers/anthropicProvider')
 const { GeminiProvider } = require('../../electron/api/providers/geminiProvider')
 const { evaluateItem, evaluateMatchup, evaluateMacro, evaluateCoaching } = require('./evaluate')
+const { validateCoachingInput, printValidation } = require('./validateInput')
 
 // ── CLI引数パース ──
 const args = process.argv.slice(2)
@@ -30,6 +31,8 @@ const providerArg = getArg('provider') || 'ollama'
 const modelArg = getArg('model') || 'qwen3.5:4b'
 const typeFilter = getArg('type') // null = 全部
 const verbose = args.includes('--verbose')
+const validateOnly = args.includes('--validate-only')
+const compareMode = args.includes('--compare')
 
 // ── プロバイダー構築 ──
 function createProvider() {
@@ -193,7 +196,41 @@ function loadModelOpts(providerType) {
   }
 }
 
+// ── 結果キャッシュ ──
+const resultsBaseDir = path.join(__dirname, '..', 'results')
+
+function saveResult(type, name, actual) {
+  const dir = path.join(resultsBaseDir, type)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(actual, null, 2), 'utf-8')
+}
+
+function loadPreviousResult(type, name) {
+  const filePath = path.join(resultsBaseDir, type, `${name}.json`)
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+  } catch {
+    return null
+  }
+}
+
 async function runTests() {
+  // validate-only モード: AI呼び出しなしで入力品質のみチェック
+  if (validateOnly) {
+    const types = typeFilter ? [typeFilter] : TYPES
+    console.log('\n=== Input Validation Only ===\n')
+    for (const type of types) {
+      if (type !== 'coaching') continue
+      const cases = loadTestCases(type)
+      if (cases.length === 0) { console.log('  コーチングテストケースなし'); continue }
+      for (const tc of cases) {
+        const result = validateCoachingInput(tc.fixture)
+        printValidation(tc.name, result)
+      }
+    }
+    return
+  }
+
   const provider = createProvider()
   const modelOpts = loadModelOpts(providerArg)
   const client = new AiClient(provider, modelOpts)
@@ -224,6 +261,16 @@ async function runTests() {
       results.total++
       process.stdout.write(`  ${tc.name} ... `)
 
+      // コーチングの場合、入力品質を事前チェック
+      if (type === 'coaching' && verbose) {
+        const inputValidation = validateCoachingInput(tc.fixture)
+        if (inputValidation.warnings.length > 0 || inputValidation.errors.length > 0) {
+          console.log('')
+          printValidation('    入力品質', inputValidation)
+          process.stdout.write(`  ${tc.name} ... `)
+        }
+      }
+
       // テストケースごとにクライアントをリセット（Interactionsセッション・totalCalls初期化）
       client.clearMatch()
 
@@ -232,7 +279,10 @@ async function runTests() {
         const actual = await callers[type](client, tc.fixture)
         const elapsed = Date.now() - startTime
 
-        const evaluation = evaluators[type](actual, tc.expected)
+        // コーチングは入力データも渡す
+        const evaluation = type === 'coaching'
+          ? evaluators[type](actual, tc.expected, tc.fixture)
+          : evaluators[type](actual, tc.expected)
 
         if (evaluation.pass) {
           typeResult.passed++
@@ -244,6 +294,26 @@ async function runTests() {
           console.log(`FAIL (${elapsed}ms)`)
           for (const d of evaluation.details) {
             console.log(`    - ${d}`)
+          }
+        }
+
+        // 結果キャッシュ保存
+        if (type === 'coaching' && actual) {
+          saveResult(type, tc.name, actual)
+        }
+
+        // compareモード: 前回結果との比較
+        if (compareMode && type === 'coaching') {
+          const prev = loadPreviousResult(type, tc.name)
+          if (prev) {
+            const prevEval = evaluators[type](prev, tc.expected, tc.fixture)
+            const change = prevEval.pass === evaluation.pass ? '(変化なし)' : prevEval.pass ? '(前回PASS→今回FAIL ⬇)' : '(前回FAIL→今回PASS ⬆)'
+            console.log(`    比較: ${change}`)
+            if (prev.overall_score !== actual?.overall_score) {
+              console.log(`    スコア: ${prev.overall_score} → ${actual?.overall_score}`)
+            }
+          } else {
+            console.log(`    比較: (前回結果なし)`)
           }
         }
 

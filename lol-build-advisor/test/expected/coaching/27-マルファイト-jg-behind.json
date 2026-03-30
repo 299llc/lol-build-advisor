@@ -1,0 +1,22 @@
+{
+  "score_range": [
+    1,
+    10
+  ],
+  "rules": [
+    {
+      "type": "must_not_recommend_grievous_when_no_healers"
+    },
+    {
+      "type": "must_respect_damage_profile"
+    },
+    {
+      "type": "game_duration_aware"
+    },
+    {
+      "type": "score_consistency"
+    }
+  ],
+  "_auto_generated": true,
+  "_source_session": "session_2026-03-26_16-01-14.json"
+}

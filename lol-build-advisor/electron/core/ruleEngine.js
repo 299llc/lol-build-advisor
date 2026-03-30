@@ -23,18 +23,35 @@ const RECALL_GOLD_HINTS = [
   { gold: 875, label: 'コンポーネント' },
 ]
 
+// アラートタイプごとの最低表示時間（秒）
+const ALERT_DISPLAY_DURATION = {
+  cs_critical: 60,
+  cs_warning: 60,
+  death: 30,
+  recall_timing: 30,
+  ward_critical: 60,
+  ward_warning: 60,
+  numerical_advantage: 20,
+  teamfight_push: 20,
+  plate_ending: 30,
+  fed_warning: 30,
+  enemy_fed: 30,
+  level_advantage: 30,
+  level_disadvantage: 30,
+}
+const DEFAULT_DISPLAY_DURATION = 15
+
 class RuleEngine {
   constructor() {
     this.lastAlerts = []
     this.lastDeathTime = 0
-    this.lastCSWarnTime = 0
     this.deathCount = 0
-    this.csWarnCount = 0
     this.lastRecallHintTime = 0
-    this.lastWardWarnTime = 0
     this.lastNumAdvantageTime = 0
     this.lastTeamfightKillCount = 0
     this.lastTeamfightAlertTime = 0
+    // アクティブアラートの表示期限を管理: type → { alert, expiresAt }
+    this._activeAlerts = new Map()
   }
 
   /**
@@ -98,22 +115,35 @@ class RuleEngine {
     if (wardAlert) alerts.push(wardAlert)
 
     // 10. 集団戦勝利→プッシュ促し
-    const teamfightAlert = this._checkTeamfightWin(gameData, allies, me, gameTime)
+    const teamfightAlert = this._checkTeamfightWin(gameData, allies, enemies, me, gameTime)
     if (teamfightAlert) alerts.push(teamfightAlert)
 
-    // 優先度でソート (高い方が先)
-    alerts.sort((a, b) => b.priority - a.priority)
+    // 新しく生成されたアラートをアクティブマップに登録（表示期限を設定）
+    const now = Date.now()
+    for (const alert of alerts) {
+      const baseType = alert.type.replace(/_ドラゴン$|_バロン$|_ヘラルド$|_ヴォイドグラブ$/, '')
+      const duration = (ALERT_DISPLAY_DURATION[baseType] || DEFAULT_DISPLAY_DURATION) * 1000
+      this._activeAlerts.set(alert.type, { alert, expiresAt: now + duration })
+    }
 
-    this.lastAlerts = alerts
-    return alerts
+    // 期限切れアラートを除去
+    for (const [type, entry] of this._activeAlerts) {
+      if (now >= entry.expiresAt) {
+        this._activeAlerts.delete(type)
+      }
+    }
+
+    // アクティブなアラートをすべて返す（新規 + まだ表示期限内のもの）
+    const activeAlerts = Array.from(this._activeAlerts.values()).map(e => e.alert)
+    activeAlerts.sort((a, b) => b.priority - a.priority)
+
+    this.lastAlerts = activeAlerts
+    return activeAlerts
   }
 
   _checkCS(me, minutes, position) {
     if (position === 'SUP') return null // サポートはCS不要
     if (minutes < 3) return null // 序盤はスキップ
-    // 60秒に1回まで
-    const now = Date.now()
-    if (now - this.lastCSWarnTime < 60000) return null
 
     const cs = me.scores?.creepScore || 0
     const benchmark = CS_BENCHMARKS[position] || 7.0
@@ -121,8 +151,6 @@ class RuleEngine {
     const ratio = cs / expectedCS
 
     if (ratio < 0.6) {
-      this.lastCSWarnTime = now
-      this.csWarnCount++
       return {
         type: 'cs_critical',
         priority: 7,
@@ -133,7 +161,6 @@ class RuleEngine {
     }
 
     if (ratio < 0.75) {
-      this.lastCSWarnTime = now
       return {
         type: 'cs_warning',
         priority: 4,
@@ -393,16 +420,12 @@ class RuleEngine {
       type: 'recall_timing',
       priority: 4,
       title: 'リコールタイミング',
-      desc: `所持ゴールド${currentGold}G — ${hint.label}が購入可能。ウェーブを押してからリコールしよう`,
+      desc: `所持ゴールド${Math.floor(currentGold)}G — ${hint.label}が購入可能。ウェーブを押してからリコールしよう`,
     }
   }
 
   _checkWardScore(me, minutes, position) {
     if (minutes < 5) return null
-
-    // 120秒に1回まで
-    const now = Date.now()
-    if (now - this.lastWardWarnTime < 120000) return null
 
     const wardScore = me.scores?.wardScore || 0
     const benchmark = WARD_BENCHMARKS[position] || 0.5
@@ -410,7 +433,6 @@ class RuleEngine {
     const ratio = wardScore / expected
 
     if (ratio < 0.4) {
-      this.lastWardWarnTime = now
       return {
         type: 'ward_critical',
         priority: 5,
@@ -421,7 +443,6 @@ class RuleEngine {
     }
 
     if (ratio < 0.6) {
-      this.lastWardWarnTime = now
       return {
         type: 'ward_warning',
         priority: 3,
@@ -433,7 +454,7 @@ class RuleEngine {
     return null
   }
 
-  _checkTeamfightWin(gameData, allies, me, gameTime) {
+  _checkTeamfightWin(gameData, allies, enemies, me, gameTime) {
     const events = gameData.events?.Events || []
     if (events.length === 0) return null
 
@@ -447,21 +468,26 @@ class RuleEngine {
       if (a.riotIdGameName) myTeamNames.add(a.riotIdGameName)
     }
 
-    const recentAllyKills = events.filter(e =>
+    const recentKills = events.filter(e =>
       e.EventName === 'ChampionKill' &&
-      e.EventTime >= gameTime - recentWindow &&
-      myTeamNames.has(e.KillerName)
-    ).length
+      e.EventTime >= gameTime - recentWindow
+    )
+    const recentAllyKills = recentKills.filter(e => myTeamNames.has(e.KillerName)).length
+    const recentAllyDeaths = recentKills.filter(e => !myTeamNames.has(e.KillerName)).length
 
-    // 新たに2キル以上増えた場合にアラート（60秒に1回まで）
+    // 味方キルが敵キルを上回り、かつ現在の生存人数でも有利な場合のみ
+    const aliveAllies = [me, ...allies].filter(p => !p.isDead).length
+    const aliveEnemies = enemies.filter(p => !p.isDead).length
+    const netKillAdvantage = recentAllyKills - recentAllyDeaths
+
     const now = Date.now()
-    if (recentAllyKills >= 2 && now - this.lastTeamfightAlertTime > 60000) {
+    if (netKillAdvantage >= 2 && aliveAllies > aliveEnemies && now - this.lastTeamfightAlertTime > 60000) {
       this.lastTeamfightAlertTime = now
       return {
         type: 'teamfight_push',
         priority: 8,
         title: '集団戦勝利！タワー/オブジェクトを狙え',
-        desc: `直近${recentWindow}秒で${recentAllyKills}キル獲得。この有利を活かしてタワーかオブジェクトを確保しよう`,
+        desc: `${aliveAllies}v${aliveEnemies}の人数有利。タワーかオブジェクトを確保しよう`,
         warning: 'ジャングルに散らばらず、チームで同じ目標を攻めること',
       }
     }
@@ -472,14 +498,12 @@ class RuleEngine {
   reset() {
     this.lastAlerts = []
     this.lastDeathTime = 0
-    this.lastCSWarnTime = 0
     this.deathCount = 0
-    this.csWarnCount = 0
     this.lastRecallHintTime = 0
-    this.lastWardWarnTime = 0
     this.lastNumAdvantageTime = 0
     this.lastTeamfightKillCount = 0
     this.lastTeamfightAlertTime = 0
+    this._activeAlerts = new Map()
   }
 }
 

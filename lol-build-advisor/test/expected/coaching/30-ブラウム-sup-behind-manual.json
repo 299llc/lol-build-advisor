@@ -1,0 +1,40 @@
+{
+  "score_range": [3, 7],
+  "build_score_range": [3, 7],
+  "rules": [
+    {
+      "type": "must_not_criticize_role_item",
+      "role": "SUP",
+      "items": ["至点のソリ", "ソラリのロケット", "オラクル レンズ"],
+      "reason": "サポート必須アイテムを批判してはならない"
+    },
+    {
+      "type": "must_not_recommend",
+      "item": "スピリットビサージュ",
+      "in": ["improve_points"],
+      "reason": "ブラウムには自己回復がなくスピリットビサージュは不適切"
+    },
+    {
+      "type": "must_not_recommend",
+      "item": "スピリット ビサージュ",
+      "in": ["improve_points"],
+      "reason": "ブラウムには自己回復がなくスピリットビサージュは不適切（スペースあり表記）"
+    },
+    {
+      "type": "must_respect_damage_profile",
+      "reason": "敵AD40%/AP60% — AP対策を推奨すべきでAR偏重推奨は不適切"
+    },
+    {
+      "type": "must_mention_keyword",
+      "keywords": ["バンドルパイプ"],
+      "in": ["sections", "good_points", "improve_points"],
+      "reason": "AP60%の敵に対してバンドルパイプを積もうとした判断に言及すべき"
+    },
+    {
+      "type": "game_duration_aware"
+    },
+    {
+      "type": "score_consistency"
+    }
+  ]
+}

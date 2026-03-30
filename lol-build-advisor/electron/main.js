@@ -81,6 +81,8 @@ const state = {
 
   // コンパクトウィンドウ
   compactWindow: null,
+  compactManuallyClosedThisGame: false,
+  _autoClosingCompact: false,
 
   // AI
   aiClient: null,
@@ -454,6 +456,10 @@ function toggleCompactWindow() {
   state.compactWindow.on('resized', saveCompactState)
 
   state.compactWindow.on('closed', () => {
+    if (state.lastGameStatus === 'ingame' && !state._autoClosingCompact) {
+      state.compactManuallyClosedThisGame = true
+    }
+    state._autoClosingCompact = false
     state.compactWindow = null
     state.mainWindow?.webContents.send('compact:status', false)
   })
@@ -491,7 +497,26 @@ function broadcast(channel, data) {
   else if (channel === 'matchup:tip') state.lastMatchupTip = data
   else if (channel === 'substitute:items') state.lastSubstituteItems = data
   else if (channel === 'core:build') state.lastCoreBuildMsg = data
-  else if (channel === 'game:status') state.lastGameStatus = data
+  else if (channel === 'game:status') {
+    const prevStatus = state.lastGameStatus
+    state.lastGameStatus = data
+
+    // オーバーレイ自動表示/非表示
+    if (loadSettings().autoOverlay) {
+      if (data === 'ingame' && prevStatus !== 'ingame') {
+        if (!state.compactWindow && !state.compactManuallyClosedThisGame) {
+          toggleCompactWindow()
+        }
+        state.compactManuallyClosedThisGame = false
+      } else if ((data === 'ended' || data === 'waiting') && prevStatus === 'ingame') {
+        if (state.compactWindow) {
+          state._autoClosingCompact = true
+          state.compactWindow.close()
+        }
+        state.compactManuallyClosedThisGame = false
+      }
+    }
+  }
   else if (channel === 'champselect:extras') state.lastChampSelectExtras = data
 
   state.mainWindow?.webContents.send(channel, data)
@@ -531,6 +556,13 @@ function setupIPC() {
   ipcMain.on('compact:close', () => state.compactWindow?.close())
   ipcMain.on('compact:set-passthrough', (_, enabled) => {
     state.compactWindow?.setIgnoreMouseEvents(enabled, { forward: true })
+  })
+
+  // オーバーレイ自動表示設定
+  ipcMain.handle('setting:autoOverlay:get', () => loadSettings().autoOverlay ?? false)
+  ipcMain.handle('setting:autoOverlay:set', (_, enabled) => {
+    saveSetting('autoOverlay', enabled)
+    return enabled
   })
 
   const keyPath = path.join(app.getPath('userData'), '.api-key')
@@ -1106,12 +1138,16 @@ function triggerGameEnd() {
   if (snapshotForCoaching) {
     snapshotForCoaching.normal_end = normalEnd
   }
+  // gameLogもリセット前にコピー（resetBuildStateでpreprocessor.gameLog=[]になるため）
+  const gameLogForCoaching = [...state.preprocessor.gameLog]
+  const gameStateForCoaching = state.currentGameState
   const macroHistorySummary = macroFeature ? macroFeature.summarizeMacroAdviceHistory() : null
 
   // UIから古いコーチング結果を即座にクリア
   broadcast('coaching:result', null)
 
   // 状態リセット（コーチング発火前に行う。snapshotForCoachingは独立コピー）
+  state.compactManuallyClosedThisGame = false
   if (state.spellsLoadedForGame) {
     const wasSpellsLoaded = true
     state.spellsLoadedForGame = false
@@ -1130,7 +1166,7 @@ function triggerGameEnd() {
     if (state.aiClient && state.aiEnabled && !state.coachingRequested && wasSpellsLoaded) {
       state.coachingRequested = true
       console.log('[GameEnd] Requesting coaching evaluation...')
-      coachingFeature.requestCoaching(snapshotForCoaching, macroHistorySummary)
+      coachingFeature.requestCoaching(snapshotForCoaching, macroHistorySummary, { gameLog: gameLogForCoaching, gameState: gameStateForCoaching })
     } else {
       console.log(`[GameEnd] Coaching skipped: aiClient=${!!state.aiClient} aiEnabled=${state.aiEnabled} coachingRequested=${state.coachingRequested}`)
       saveLastGame(snapshotForCoaching, null)
@@ -1399,9 +1435,7 @@ async function handleGameData(gameData) {
   // ルールベースアラート (LLM不要)
   if (state.ruleEngine) {
     const ruleAlerts = state.ruleEngine.evaluate(gameData, resolvedPosition)
-    if (ruleAlerts.length > 0) {
-      broadcast('rule:alerts', ruleAlerts)
-    }
+    broadcast('rule:alerts', ruleAlerts)
   }
 
   // スナップショット送信
@@ -1413,14 +1447,15 @@ async function handleGameData(gameData) {
     isSpectator,
     myTeamSide: me.team,
     ddragon: state.ddragonBase,
-    ended: false
+    ended: false,
+    events: { Events: state.cachedEvents || [] },
   }
   state.lastGameSnapshot = snapshot
 
   const objSummary = getObjectivesSummary(events, gt)
-  // デバッグ: 60秒ごとにオブジェクト状況をログ（カウントダウン秒数の変化ではスキップ）
+  // ステータスが実質変化したときだけログ（カウントダウン秒数・討伐数の差異は無視）
   const stripCountdown = (s) => s.replace(/あと\d+:\d+/g, 'あとX:XX').replace(/\d+体討伐済み/g, 'N体討伐済み')
-  const objLogKey = `${Math.floor(gt / 60)}_${stripCountdown(objSummary.dragon)}_${stripCountdown(objSummary.baron)}`
+  const objLogKey = `${stripCountdown(objSummary.dragon)}_${stripCountdown(objSummary.baron)}`
   if (objLogKey !== state._lastObjLogKey) {
     state._lastObjLogKey = objLogKey
     // 未出現・リスポーン待ちのオブジェクトはログから省略

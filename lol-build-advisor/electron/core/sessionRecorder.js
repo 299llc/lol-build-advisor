@@ -10,7 +10,7 @@
  *   // webContents.send を wrap する
  *   recorder.install(state.mainWindow.webContents)
  *   // 試合終了時
- *   recorder.save()  // → recordings/session_2026-03-15_14-30-00.json
+ *   recorder.save()  // → game-logs/session_2026-03-15_14-30-00.json
  */
 
 const fs = require('fs')
@@ -120,7 +120,7 @@ class SessionRecorder {
       return null
     }
 
-    const dir = path.join(this.userDataPath, 'recordings')
+    const dir = path.join(this.userDataPath, 'game-logs')
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true })
     }
@@ -155,7 +155,7 @@ class SessionRecorder {
    * @returns {Array<{name, path, recordedAt, eventCount, duration}>}
    */
   listSessions() {
-    const dir = path.join(this.userDataPath, 'recordings')
+    const dir = path.join(this.userDataPath, 'game-logs')
     if (!fs.existsSync(dir)) return []
 
     return fs.readdirSync(dir)
