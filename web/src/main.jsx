@@ -4,16 +4,23 @@ import './index.css'
 import App from './App.jsx'
 import Privacy from './Privacy.jsx'
 
+const BASE = '/lolsupkun'
+
+function getPage() {
+  const path = window.location.pathname.replace(BASE, '').replace(/\/+$/, '')
+  return path || '/'
+}
+
 function Router() {
-  const [page, setPage] = useState(window.location.hash)
+  const [page, setPage] = useState(getPage)
 
   useEffect(() => {
-    const onHash = () => setPage(window.location.hash)
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
+    const onPopState = () => setPage(getPage())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  if (page === '#/privacy') return <Privacy />
+  if (page === '/privacy') return <Privacy />
   return <App />
 }
 

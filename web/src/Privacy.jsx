@@ -2,9 +2,9 @@ import './App.css'
 
 export default function Privacy() {
   return (
-    <div className="min-h-screen px-6 py-24" style={{ background: '#010A13', color: '#e2e8f0' }}>
-      <div className="max-w-3xl mx-auto">
-        <a href="/" className="inline-flex items-center gap-2 mb-8 text-sm hover:opacity-80 transition-opacity" style={{ color: '#C8AA6E' }}>
+    <main className="min-h-screen px-6 py-24" style={{ background: '#010A13', color: '#e2e8f0' }}>
+      <article className="max-w-3xl mx-auto">
+        <a href={import.meta.env.BASE_URL} className="inline-flex items-center gap-2 mb-8 text-sm hover:opacity-80 transition-opacity" style={{ color: '#C8AA6E' }}>
           ← トップに戻る
         </a>
 
@@ -114,7 +114,7 @@ export default function Privacy() {
           </section>
 
         </div>
-      </div>
-    </div>
+      </article>
+    </main>
   )
 }

@@ -84,7 +84,7 @@ const AppIcon = ({ size = 32 }) => (
 // ---- Navbar ----
 function Navbar() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b" style={{ background: 'rgba(1,10,19,0.9)', backdropFilter: 'blur(12px)', borderColor: 'rgba(200,170,110,0.2)' }}>
+    <nav aria-label="メインナビゲーション" className="fixed top-0 left-0 right-0 z-50 border-b" style={{ background: 'rgba(1,10,19,0.9)', backdropFilter: 'blur(12px)', borderColor: 'rgba(200,170,110,0.2)' }}>
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <AppIcon size={32} />
@@ -682,7 +682,7 @@ function Footer() {
             <a href="#how" className="hover:text-gold transition-colors">使い方</a>
             <a href="#pricing" className="hover:text-gold transition-colors">料金</a>
             <a href="#faq" className="hover:text-gold transition-colors">FAQ</a>
-            <a href="#/privacy" className="hover:text-gold transition-colors">プライバシーポリシー</a>
+            <a href={`${import.meta.env.BASE_URL}privacy`} className="hover:text-gold transition-colors">プライバシーポリシー</a>
           </div>
         </div>
         <div className="gold-divider mb-6" />
@@ -703,16 +703,18 @@ export default function App() {
   return (
     <div className="min-h-screen" style={{ background: '#010A13' }}>
       <Navbar />
-      <Hero />
-      <EarlyAccessBanner />
-      <SocialProof />
-      <Problem />
-      <Features />
-      <FeatureGrid />
-      <HowItWorks />
-      <Pricing />
-      <FAQ />
-      <FinalCTA />
+      <main>
+        <Hero />
+        <EarlyAccessBanner />
+        <SocialProof />
+        <Problem />
+        <Features />
+        <FeatureGrid />
+        <HowItWorks />
+        <Pricing />
+        <FAQ />
+        <FinalCTA />
+      </main>
       <Footer />
     </div>
   )

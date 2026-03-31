@@ -1,16 +1,150 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/lolsupkun/favicon.svg" />
+    <link rel="icon" type="image/png" href="/lolsupkun/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ろるさぽくん — AIがリアルタイムで勝ちに導く</title>
-    <meta name="description" content="League of Legends の試合中、AIがリアルタイムでビルド提案・対面対策・試合後コーチングを提供するデスクトップアプリ。Early Access中はAI無制限。" />
+
+    <!-- SEO Basic -->
+    <title>ろるさぽくん — AIがリアルタイムで勝ちに導く | LoLビルド提案・コーチングアプリ</title>
+    <meta name="description" content="League of Legendsの試合中、AIがリアルタイムでビルド提案・対面対策・試合後コーチングを提供するWindows向けデスクトップアプリ。Early Access中はAI機能が無制限で無料。" />
+    <meta name="keywords" content="LoL,League of Legends,ビルド提案,AI,コーチング,マッチアップ,対面対策,リアルタイム,デスクトップアプリ,Windows,ろるさぽくん" />
+    <link rel="canonical" href="https://299llc.github.io/lolsupkun/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ろるさぽくん" />
+    <meta property="og:title" content="ろるさぽくん — AIがリアルタイムで勝ちに導く" />
+    <meta property="og:description" content="League of Legendsの試合中、AIがリアルタイムでビルド提案・対面対策・試合後コーチングを提供。Early Access中はAI機能が無制限で無料。" />
+    <meta property="og:url" content="https://299llc.github.io/lolsupkun/" />
+    <meta property="og:image" content="https://299llc.github.io/lolsupkun/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="ja_JP" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ろるさぽくん — AIがリアルタイムで勝ちに導く" />
+    <meta name="twitter:description" content="LoLの試合中、AIがビルド提案・対面対策・コーチングをリアルタイム提供。Early Access中は無料で無制限。" />
+    <meta name="twitter:image" content="https://299llc.github.io/lolsupkun/og-image.png" />
+
+    <!-- Additional SEO -->
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="合同会社299" />
+    <meta name="theme-color" content="#010A13" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+    <!-- JSON-LD: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ろるさぽくん",
+      "description": "League of Legendsの試合中、AIがリアルタイムでビルド提案・対面対策・試合後コーチングを提供するデスクトップアプリ",
+      "url": "https://299llc.github.io/lolsupkun/",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Windows 10, Windows 11",
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Free（Early Access）",
+          "price": "0",
+          "priceCurrency": "JPY",
+          "description": "Early Access期間中はAI機能が無制限で無料"
+        },
+        {
+          "@type": "Offer",
+          "name": "Pro",
+          "price": "980",
+          "priceCurrency": "JPY",
+          "description": "AI機能無制限（正式リリース後）"
+        }
+      ],
+      "publisher": {
+        "@type": "Organization",
+        "name": "合同会社299",
+        "email": "support@299llc.com"
+      },
+      "featureList": [
+        "AIリアルタイムビルド提案",
+        "チャンプセレクト分析",
+        "試合後AIコーチング",
+        "対面マッチアップTip",
+        "KDA・レベル・アイテム常時表示",
+        "オブジェクトタイマー追跡"
+      ],
+      "softwareRequirements": "Windows 10/11",
+      "installUrl": "https://www.microsoft.com/store/apps/",
+      "inLanguage": "ja"
+    }
+    </script>
+
+    <!-- JSON-LD: FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "無料で使えますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "はい。Early Access期間中はAI機能が回数制限なしで無料です。正式リリース後はFreeプラン（1日5回まで）とProプラン（¥980/月、無制限）の2プランになります。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "アカウント登録は必要ですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "いいえ。Microsoft Storeからインストールするだけで使い始められます。ログインやアカウント作成は不要です。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Riot VanguardやアンチチートがElectronをブロックしませんか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "実機テストで動作確認済みです。現時点でVanguardによるブロックは確認されていません。LoLはボーダーレスウィンドウモードでのプレイを推奨します。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "AIの提案精度はどのくらいですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "OP.GGのコアビルドデータと戦況（KDA・アイテム・敵構成・試合時間）を組み合わせてAIが判断します。状況に応じた提案が得られますが、最終的なビルド判断はプレイヤーが行ってください。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Early Accessはいつまでですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "終了時期は未定です。正式リリースに移行する際は事前にお知らせします。Early Access中にインストールしていただければ、移行後もスムーズにご利用いただけます。"
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
+    <!-- GitHub Pages SPA redirect receiver -->
+    <script>
+      (function(){
+        var redirect = sessionStorage.redirect;
+        delete sessionStorage.redirect;
+        if (redirect && redirect !== location.href) {
+          history.replaceState(null, null, redirect);
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

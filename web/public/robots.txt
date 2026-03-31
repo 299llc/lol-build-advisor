@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://299llc.github.io/lolsupkun/sitemap.xml
