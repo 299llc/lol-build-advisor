@@ -74,10 +74,22 @@
   ],
   "core_match_rate": 75,
   "objective_participation": {
-    "dragon": 0,
-    "baron": 0,
-    "herald": 0,
-    "voidgrub": 0
+    "dragon": {
+      "ally": 0,
+      "my": 0
+    },
+    "baron": {
+      "ally": 0,
+      "my": 0
+    },
+    "herald": {
+      "ally": 0,
+      "my": 0
+    },
+    "voidgrub": {
+      "ally": 0,
+      "my": 0
+    }
   },
   "kill_diff_final": 7,
   "snapshot_count": 32,

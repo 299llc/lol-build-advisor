@@ -42,6 +42,7 @@ export default function App() {
         macroLoading={macroLoading}
         champSelectExtras={champSelectExtras}
         matchupTip={matchupTip}
+        ruleAlerts={ruleAlerts}
       />
     )
   }
@@ -112,6 +113,7 @@ export default function App() {
               macroLoading={macroLoading}
               champSelectExtras={champSelectExtras}
               matchupTip={matchupTip}
+              ruleAlerts={ruleAlerts}
               embedded
             />
           </div>

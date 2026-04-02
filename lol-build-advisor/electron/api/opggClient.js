@@ -453,11 +453,24 @@ async function fetchLaneMetaChampions(position) {
     })
     if (!raw) return []
 
+    // APIは全ポジション分を返す: Positions([top],[mid],[jungle],[adc],[support])
+    // 対象ポジションのセクションだけ抽出する
+    const POSITION_ORDER = { top: 0, mid: 1, jungle: 2, adc: 3, support: 4 }
+    const posIdx = POSITION_ORDER[pos]
+    if (posIdx === undefined) return []
+
+    const posMatch = raw.match(/Positions\((\[.*)\)\s*\)\s*$/s)
+    if (!posMatch) return []
+
+    const sections = posMatch[1].split('],[')
+    if (posIdx >= sections.length) return []
+    const section = sections[posIdx]
+
     // Top("ChampName",isRip,play,win,kills,winRate,pickRate,roleRate,banRate,kda,tier,rank,rankPrev,rankPrevPatch)
     const regex = /Top\("([^"]+)",(true|false),(\d+),(\d+),(\d+),([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+),(\d+),(\d+),/g
     const champions = []
     let m
-    while ((m = regex.exec(raw)) !== null) {
+    while ((m = regex.exec(section)) !== null) {
       champions.push({
         name: m[1],
         winRate: parseFloat(m[6]),
@@ -478,4 +491,60 @@ async function fetchLaneMetaChampions(position) {
   }
 }
 
-module.exports = { fetchChampionBuild, buildCoreBuildIds, normalizeChampionName, normalizePosition, fetchMatchupItems, fetchMatchupWinRate, fetchLaneMetaChampions }
+/**
+ * チャンピオン単体の試合時間別勝率を取得（マッチアップデータがない場合のフォールバック）
+ * @returns {Array|null} game_lengths 配列
+ */
+async function fetchChampionGameLengths(championName, position) {
+  const champKey = normalizeChampionName(championName)
+  const pos = normalizePosition(position)
+
+  console.log(`[OP.GG] Fetching champion game lengths: ${champKey} ${pos}`)
+
+  try {
+    const raw = await mcpCall('lol_get_champion_analysis', {
+      champion: champKey,
+      position: pos,
+      game_mode: 'ranked',
+      desired_output_fields: ['data.game_lengths']
+    })
+    if (!raw) return null
+
+    // Kotlin-like テキスト形式から game_length を抽出
+    // GameLength(game_length=25,rate=0.512,play=1234,win=632) のようなパターン
+    const gameLengths = []
+    const regex = /GameLength\(game_length=(\d+),rate=([\d.]+),play=(\d+),win=(\d+)\)/g
+    let m
+    while ((m = regex.exec(raw)) !== null) {
+      gameLengths.push({
+        game_length: parseInt(m[1]),
+        rate: parseFloat(m[2]),
+        play: parseInt(m[3]),
+        win: parseInt(m[4])
+      })
+    }
+
+    if (gameLengths.length > 0) {
+      console.log(`[OP.GG] Champion game lengths: ${gameLengths.map(g => `${g.game_length}min=${Math.round(g.rate * 100)}%`).join(', ')}`)
+      return gameLengths
+    }
+
+    // JSON形式の場合も試す
+    try {
+      const parsed = JSON.parse(raw)
+      const lengths = parsed?.data?.game_lengths || parsed?.game_lengths
+      if (Array.isArray(lengths) && lengths.length > 0) {
+        console.log(`[OP.GG] Champion game lengths (JSON): ${lengths.map(g => `${g.game_length}min=${Math.round(g.rate * 100)}%`).join(', ')}`)
+        return lengths
+      }
+    } catch { /* not JSON */ }
+
+    console.log('[OP.GG] No game_lengths data in champion analysis')
+    return null
+  } catch (err) {
+    console.error(`[OP.GG] Champion game lengths error: ${err.message}`)
+    return null
+  }
+}
+
+module.exports = { fetchChampionBuild, buildCoreBuildIds, normalizeChampionName, normalizePosition, fetchMatchupItems, fetchMatchupWinRate, fetchLaneMetaChampions, fetchChampionGameLengths }

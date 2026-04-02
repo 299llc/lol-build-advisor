@@ -29,6 +29,9 @@ module.exports = {
   ITEM_COMPLETE_GOLD: 2500,
   ITEM_BOOT_GOLD: 900,
 
+  // ブーツを積まないチャンピオン（Wで味方に付くため移動速度不要）
+  NO_BOOTS_CHAMPIONS: ['Yuumi'],
+
   // カウンターアイテムマッピング
   COUNTER_ITEMS: {
     healer: ['3033', '3165', '3075', '6609'],

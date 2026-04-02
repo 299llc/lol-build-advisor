@@ -111,7 +111,8 @@ function validateCoachingInput(input) {
 
   // objective_participation (全0は怪しい — 長い試合で)
   if (minutes > 15 && input.objective_participation) {
-    const total = Object.values(input.objective_participation).reduce((s, v) => s + v, 0)
+    const vals = Object.values(input.objective_participation)
+    const total = vals.reduce((s, v) => s + (typeof v === 'object' ? (v.ally || 0) : v), 0)
     if (total === 0) {
       warnings.push('objective_participation が全て0 (15分超の試合 — データ不足の可能性)')
     }

@@ -38,7 +38,7 @@ LoLクライアントのAPIからゲームデータを自動取得し、AIがそ
 - League of Legendsクライアントがインストール済みであること
 
 ## プライバシーポリシーURL
-（要作成）
+https://299llc.github.io/lolsupkun/privacy
 
 ## 年齢レーティング
 IARC: Everyone (全年齢)

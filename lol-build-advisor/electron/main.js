@@ -17,7 +17,7 @@ const { detectFlags } = require('./core/championAnalysis')
 const { RuleEngine } = require('./core/ruleEngine')
 const { getObjectivesSummary } = require('./core/objectiveTracker')
 const { buildMatchChampionKnowledge } = require('./core/knowledgeDb')
-const { FEATURE_MACRO_ENABLED, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS } = require('./core/config')
+const { FEATURE_MACRO_ENABLED, DEFAULT_WINDOW, DDRAGON_BASE, POLL_INTERVAL_MS, NO_BOOTS_CHAMPIONS } = require('./core/config')
 const macroFeature = FEATURE_MACRO_ENABLED ? require('./features/macro') : null
 const suggestionFeature = require('./features/suggestion')
 const matchupFeature = require('./features/matchup')
@@ -329,9 +329,9 @@ function isNormalEndFromEvents(events) {
   const turretKillCount = safeEvents.filter(event => event?.EventName === 'TurretKilled').length
   // remake判定: GameEnd があるがタワー破壊が極端に少ない & 試合時間が短い
   const isRemake = hasGameEnd && turretKillCount === 0
-  // 通常終了: タワーが敵味方合わせて6本以上折れた試合（surrender含む）
+  // 通常終了: タワーが敵味方合わせて3本以上折れた試合（surrender含む）
   // remake のみ除外
-  const hit = hasGameEnd && !isRemake && turretKillCount >= 6
+  const hit = hasGameEnd && !isRemake && turretKillCount >= 3
   console.log(
     `[GameEnd] normal_end=${hit} remake=${isRemake} ` +
     `game_end=${hasGameEnd} turret_kills=${turretKillCount} from_events=${safeEvents.length}`
@@ -976,7 +976,11 @@ async function loadCoreBuild(championEnName, position) {
     if (!analysis) return null
 
     state.currentAnalysis = analysis
-    const defaultIds = buildCoreBuildIds(analysis)
+    let defaultIds = buildCoreBuildIds(analysis)
+    // ブーツ不要チャンピオンはコアビルドからブーツを除外
+    if (NO_BOOTS_CHAMPIONS.includes(championEnName)) {
+      defaultIds = defaultIds.filter(id => !(getItemById(String(id))?.tags || []).includes('Boots'))
+    }
     if (!defaultIds.length) return null
 
     const defaultBuild = resolveItemInfo(defaultIds)
@@ -1124,8 +1128,14 @@ async function startPolling() {
 
 function handleNoGameData() {
   if (state.lastGameSnapshot && !state.lastGameSnapshot.ended) {
-    triggerGameEnd()
+    // 一時的なAPI切断で誤ってゲーム終了を発火しないよう、連続3回nullで初めて終了判定
+    state._noDataCount = (state._noDataCount || 0) + 1
+    if (state._noDataCount >= 3) {
+      state._noDataCount = 0
+      triggerGameEnd()
+    }
   } else {
+    state._noDataCount = 0
     // ゲーム中でない場合、LCU EndOfGame もチェック
     checkEndOfGameOrChampSelect()
   }
@@ -1228,6 +1238,7 @@ function triggerGameEnd() {
 }
 
 async function handleGameData(gameData) {
+  state._noDataCount = 0
   // サモナーズリフト以外（ARAM等）はAI分析をスキップ
   // 待機画面のままで前回のコーチング結果が表示される
   const gameMode = gameData.gameData?.gameMode

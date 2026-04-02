@@ -38,11 +38,13 @@ npm run electron:build
 
 ```
 LoL Client (port 2999) → LiveClientPoller (3秒ポーリング)
-  → DiffDetector (アイテム購入/キルデス/2分経過で発火、10秒デバウンス)
+  → DiffDetector (アイテム購入/キルデス/フェーズ遷移/90秒で発火)
   → ContextBuilder (静的+動的コンテキスト)
-  → ClaudeApiClient (Haiku: 提案/マッチアップ、Sonnet: コーチング、マクロはPhase 2)
+  → AiClient (プロバイダー抽象化: Gemini/Claude/Bedrock/Ollama)
   → IPC で Renderer に送信
 ```
+
+AIモデルは `.env` で機能別に指定する（デフォルトモデルのフォールバックなし、未設定時はエラー）。
 
 ### Main Process のモジュール構成
 

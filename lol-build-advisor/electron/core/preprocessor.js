@@ -3,7 +3,7 @@ const { extractEnName } = require('../api/contextBuilder')
 const { getItemById, getAllChampions, getSpells } = require('../api/patchData')
 const { extractTraits, detectFlags } = require('./championAnalysis')
 const { objectiveStatus, getAvailableObjectiveNames, getObjectiveTimers } = require('./objectiveTracker')
-const { OBJECTIVES, classifyObjectiveEvents, isCompletedItem } = require('./config')
+const { OBJECTIVES, classifyObjectiveEvents, isCompletedItem, NO_BOOTS_CHAMPIONS } = require('./config')
 const { getGamePhase } = require('./knowledgeDb')
 
 // ロール対面マッピング（同じレーンで対面する相手を特定）
@@ -391,6 +391,7 @@ class Preprocessor {
     const buildPlayerInfo = (p) => ({
       champion: p.championName,
       enName: extractEnName(p),
+      _names: [p.summonerName, p.riotIdGameName, p.championName].filter(Boolean),
       position: normalizePosition(p.position),
       level: p.level,
       items: (p.items || []).filter(i => i.itemID > 0).map(i => ({
@@ -417,6 +418,7 @@ class Preprocessor {
       me: {
         champion: me.championName,
         enName: meEnName,
+        _names: [me.summonerName, me.riotIdGameName, me.championName].filter(Boolean),
         position: myPosition,
         level: me.level,
         items: myItems.map(i => ({ id: i.itemID, name: i.displayName })),
@@ -477,12 +479,15 @@ class Preprocessor {
     const ownedItemIds = new Set(gameState.me.items.map(i => String(i.id)))
     const candidates = []
     const candidateIds = new Set()
+    const skipBoots = NO_BOOTS_CHAMPIONS.includes(gameState.me.champion)
+    const isBoot = (patchItem) => (patchItem?.tags || []).includes('Boots')
 
     // 1. コアビルド未購入品（tag: "core"）
     for (const item of coreBuild) {
       const itemId = String(item.id || item.itemId)
       if (ownedItemIds.has(itemId)) continue
       const patchItem = getItemById(itemId)
+      if (skipBoots && isBoot(patchItem)) continue
       candidates.push({ id: itemId, name: patchItem?.jaName || item.name || itemId, tag: 'core' })
       candidateIds.add(itemId)
     }
@@ -493,6 +498,7 @@ class Preprocessor {
       if (ownedItemIds.has(itemId) || candidateIds.has(itemId)) continue
       const patchItem = getItemById(itemId)
       if (!patchItem) continue
+      if (skipBoots && isBoot(patchItem)) continue
       candidates.push({ id: itemId, name: patchItem.jaName || item.name || itemId, tag: 'situational' })
       candidateIds.add(itemId)
     }
@@ -846,13 +852,32 @@ class Preprocessor {
       ? Math.round(matchCount / coreBuildIds.length * 100)
       : 0
 
-    // オブジェクト参加推定（イベントログから）
+    // オブジェクト参加推定（イベントログから味方取得数・自分関与数を集計）
     const objectiveEvents = classifyObjectiveEvents(events)
+    const myNames = new Set(gameState.me._names || [])
+    const allyNames = new Set(myNames)
+    for (const a of gameState.allies) {
+      for (const n of (a._names || [])) allyNames.add(n)
+    }
+
+    function countObjective(evList) {
+      let ally = 0, my = 0
+      for (const ev of evList) {
+        const killer = ev.KillerName || ''
+        const assisters = ev.Assisters || []
+        const isAlly = allyNames.has(killer)
+        if (!isAlly) continue
+        ally++
+        if (myNames.has(killer) || assisters.some(a => myNames.has(a))) my++
+      }
+      return { ally, my }
+    }
+
     const objectiveParticipation = {
-      dragon: objectiveEvents.dragon.length,
-      baron: objectiveEvents.baron.length,
-      herald: objectiveEvents.herald.length,
-      voidgrub: objectiveEvents.voidgrub.length
+      dragon: countObjective(objectiveEvents.dragon),
+      baron: countObjective(objectiveEvents.baron),
+      herald: countObjective(objectiveEvents.herald),
+      voidgrub: countObjective(objectiveEvents.voidgrub)
     }
 
     // 敵全員の最終ビルド・KDA

@@ -193,7 +193,7 @@ function SkillOrderGrid({ tree }) {
 
 const POSITION_LABELS = {
   TOP: 'トップ', JUNGLE: 'ジャングル', MIDDLE: 'ミッド', BOTTOM: 'ボット', UTILITY: 'サポート',
-  top: 'トップ', jungle: 'ジャングル', mid: 'ミッド', adc: 'ボット', support: 'サポート',
+  top: 'トップ', jungle: 'ジャングル', mid: 'ミッド', adc: 'ボット', support: 'サポート', utility: 'サポート',
 }
 
 function MetaChampions({ meta, ddragon }) {

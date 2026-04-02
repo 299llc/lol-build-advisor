@@ -3,7 +3,7 @@
 // findLaneOpponent, injectCounterItems, buildFallbackSubstituteItems, useFallbackSubstituteItems
 
 const { getItemById, getSpells } = require('../api/patchData')
-const { fetchMatchupItems, fetchMatchupWinRate } = require('../api/opggClient')
+const { fetchMatchupItems, fetchMatchupWinRate, fetchChampionGameLengths } = require('../api/opggClient')
 const { isCompletedItem } = require('../core/config')
 
 let state = null
@@ -205,13 +205,17 @@ function handleMatchupTip(me, resolvedPosition, enemies) {
   Promise.all([
     fetchMatchupWinRate(me.enName, laneOpponent.enName, resolvedPosition).catch(() => null),
     (state.matchupItemsPromise || Promise.resolve(null)).catch(() => null),
-  ]).then(([winRate]) => {
+  ]).then(async ([winRate]) => {
     if (winRate !== null) {
       structuredInput.matchup_winrate = Math.round(winRate * 1000) / 10 // パーセント（小数点1桁）
     }
-    // gameLengths から power_curve を生成
-    if (state.matchupGameLengths) {
-      structuredInput.power_curve = analyzeGameLengths(state.matchupGameLengths)
+    // gameLengths から power_curve を生成（マッチアップデータがなければチャンピオン単体データで代替）
+    let gameLengths = state.matchupGameLengths
+    if (!gameLengths) {
+      gameLengths = await fetchChampionGameLengths(me.enName, resolvedPosition).catch(() => null)
+    }
+    if (gameLengths) {
+      structuredInput.power_curve = analyzeGameLengths(gameLengths)
     }
     return state.aiClient.getMatchupTip(structuredInput)
   }).then(rawTip => {

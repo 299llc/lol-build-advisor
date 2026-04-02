@@ -56,13 +56,14 @@ function PowerCurveBar({ powerCurve }) {
 }
 
 // チーム戦略表示
-function TeamStrategyContent({ strategy }) {
+function TeamStrategyContent({ strategy, powerCurve }) {
   if (!strategy) return null
   const isMid = strategy._phase === 'mid'
   const accentColor = isMid ? '#C8AA6E' : '#0AC8B9'
 
   return (
     <div style={{ padding: '0 12px 10px', fontSize: 12, lineHeight: 1.6, color: '#ccc', userSelect: 'text', cursor: 'text', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+      {powerCurve && <PowerCurveBar powerCurve={powerCurve} />}
       {/* 中盤: objective_priority, your_role, rotation, watch_out */}
       {isMid && (
         <>
@@ -184,7 +185,7 @@ export function MatchupTip({ tip, loading, laningOver = false, teamStrategy, tea
       </button>
 
       {/* チーム戦略コンテンツ */}
-      {showStrategy && expanded && <TeamStrategyContent strategy={teamStrategy} />}
+      {showStrategy && expanded && <TeamStrategyContent strategy={teamStrategy} powerCurve={tip?.power_curve} />}
 
       {/* マッチアップTipコンテンツ */}
       {!showStrategy && tip && expanded && (

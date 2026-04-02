@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { X, Lock, Unlock, Navigation, Loader2, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Lock, Unlock, Navigation, Loader2, AlertTriangle, Target, Skull, TrendingUp, TrendingDown, Swords, Shield, Eye, DollarSign, Users, Zap } from 'lucide-react'
 
 function formatGameTime(seconds) {
   if (seconds == null || seconds <= 0) return null
@@ -195,6 +195,86 @@ function CompactMatchup({ tip }) {
   )
 }
 
+const COMPACT_ALERT_ICONS = {
+  cs_critical: TrendingDown, cs_warning: TrendingDown,
+  obj_available: Target, obj_soon: Target, obj_imminent: Target, obj_now: Target,
+  death: Skull, level_advantage: TrendingUp, level_disadvantage: TrendingDown,
+  fed_warning: AlertTriangle, enemy_fed: Swords, plate_ending: Shield,
+  numerical_advantage: Users, recall_timing: DollarSign,
+  ward_critical: Eye, ward_warning: Eye, teamfight_push: Zap,
+}
+
+const COMPACT_ALERT_COLORS = {
+  cs_critical: 'border-lol-red/40 bg-lol-red/10', cs_warning: 'border-yellow-500/40 bg-yellow-500/10',
+  death: 'border-lol-red/40 bg-lol-red/10', level_disadvantage: 'border-yellow-500/40 bg-yellow-500/10',
+  level_advantage: 'border-lol-blue/40 bg-lol-blue/10', fed_warning: 'border-yellow-500/40 bg-yellow-500/10',
+  enemy_fed: 'border-lol-red/40 bg-lol-red/10', plate_ending: 'border-lol-gold/40 bg-lol-gold/10',
+  numerical_advantage: 'border-lol-blue/40 bg-lol-blue/10', recall_timing: 'border-lol-gold/40 bg-lol-gold/10',
+  ward_critical: 'border-lol-red/40 bg-lol-red/10', ward_warning: 'border-yellow-500/40 bg-yellow-500/10',
+  teamfight_push: 'border-lol-blue/40 bg-lol-blue/10',
+}
+
+function getCompactAlertStyle(type) {
+  for (const [key, Icon] of Object.entries(COMPACT_ALERT_ICONS)) {
+    if (type.startsWith(key)) return { Icon, color: COMPACT_ALERT_COLORS[key] || 'border-lol-gold/40 bg-lol-gold/10' }
+  }
+  return { Icon: AlertTriangle, color: 'border-lol-gold/40 bg-lol-gold/10' }
+}
+
+// ルールアラート（1件ずつローテーション表示）
+function CompactAlerts({ alerts }) {
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [visible, setVisible] = useState(true)
+  const timerRef = useRef(null)
+  const alertCount = alerts?.length || 0
+
+  useEffect(() => {
+    setCurrentIdx(0)
+    setVisible(true)
+  }, [alertCount])
+
+  useEffect(() => {
+    if (alertCount <= 1) return
+    timerRef.current = setInterval(() => {
+      setVisible(false)
+      setTimeout(() => {
+        setCurrentIdx(prev => (prev + 1) % alertCount)
+        setVisible(true)
+      }, 300)
+    }, 4000)
+    return () => clearInterval(timerRef.current)
+  }, [alertCount])
+
+  if (!alerts || alerts.length === 0) return null
+
+  const alert = alerts[currentIdx % alertCount]
+  if (!alert) return null
+  const { Icon, color } = getCompactAlertStyle(alert.type)
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 px-0.5">
+        <AlertTriangle size={9} className="text-lol-gold" />
+        <span className="text-[9px] text-lol-gold font-heading tracking-wider">ALERTS</span>
+        {alertCount > 1 && (
+          <span className="text-[8px] text-white/30 ml-auto">{(currentIdx % alertCount) + 1}/{alertCount}</span>
+        )}
+      </div>
+      <div
+        className={`px-2 py-1.5 rounded border transition-opacity duration-300 ${color} ${visible ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <div className="flex items-start gap-1.5">
+          <Icon size={11} className="text-lol-text-light mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-lol-text-light leading-snug">{alert.title}</p>
+            <p className="text-[9px] text-white/60 leading-snug">{alert.desc}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OverlayGuide({ onDismiss }) {
   return (
     <div className="flex flex-col gap-3 px-4 py-3">
@@ -238,7 +318,7 @@ function OverlayGuide({ onDismiss }) {
 
 const GUIDE_SHOWN_KEY = 'overlay-guide-shown'
 
-export function CompactView({ status, gameData, coreBuild, aiSuggestion, aiLoading, substituteItems, macroAdvice, macroLoading, champSelectExtras, matchupTip, embedded = false }) {
+export function CompactView({ status, gameData, coreBuild, aiSuggestion, aiLoading, substituteItems, macroAdvice, macroLoading, champSelectExtras, matchupTip, ruleAlerts, embedded = false }) {
   const [locked, setLocked] = useState(true)
   const [showGuide, setShowGuide] = useState(() => {
     try { return !localStorage.getItem(GUIDE_SHOWN_KEY) } catch { return true }
@@ -291,6 +371,7 @@ export function CompactView({ status, gameData, coreBuild, aiSuggestion, aiLoadi
               skillOrder={champSelectExtras?.skills?.order}
             />
             {(macroAdvice || macroLoading) && <CompactMacro advice={macroAdvice} loading={macroLoading} />}
+            <CompactAlerts alerts={ruleAlerts} />
           </>
         ) : (
           <div className="flex items-center justify-center h-full">

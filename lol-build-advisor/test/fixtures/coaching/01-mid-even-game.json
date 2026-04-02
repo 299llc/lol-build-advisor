@@ -24,7 +24,7 @@
     { "item": "ラバドンデスキャップ", "time": 1440 }
   ],
   "core_match_rate": 80,
-  "objective_participation": 4,
+  "objective_participation": { "dragon": { "ally": 2, "my": 1 }, "baron": { "ally": 1, "my": 1 }, "herald": { "ally": 1, "my": 1 }, "voidgrub": { "ally": 0, "my": 0 } },
   "kill_diff_final": 2,
   "snapshot_count": 15
 }

@@ -17,10 +17,6 @@ const {
 const { buildKnowledgeContext } = require('../core/knowledgeDb')
 const { AnthropicProvider } = require('./providers/anthropicProvider')
 
-const DEFAULT_MODELS = {
-  gemini: 'gemini-2.5-flash',
-  default: 'claude-haiku-4-5-20251001',
-}
 
 
 const MACRO_RESPONSE_SCHEMA = {
@@ -82,12 +78,11 @@ class AiClient {
     } else {
       this.provider = providerOrApiKey
     }
-    const defaultModel = DEFAULT_MODELS[this.provider?.type] || DEFAULT_MODELS.default
-    this.model = opts.model || defaultModel
-    this.qualityModel = opts.qualityModel || defaultModel
+    this.model = opts.model || null
+    this.qualityModel = opts.qualityModel || null
     this.suggestionModel = opts.suggestionModel || this.model
     this.matchupModel = opts.matchupModel || this.qualityModel
-    this.macroModel = opts.macroModel || null  // null → _getMacroModel() でプロバイダー別デフォルト
+    this.macroModel = opts.macroModel || null
     this.coachingModel = opts.coachingModel || this.qualityModel
     this.coreBuild = null
     this.substituteItems = []
@@ -234,6 +229,7 @@ class AiClient {
   }
 
   async _callInteractionApi({ kind, model, maxTokens, temperature = 0, system, messages, timeoutMs, logType, jsonSchema = null, sessionInfo = null }) {
+    if (!model) throw new Error(`[AI:${logType}] model が未設定です。.env でモデルを指定してください。`)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
     const startTime = Date.now()
@@ -314,6 +310,7 @@ class AiClient {
 
   // 共通API呼び出し (プロバイダー経由)
   async _callApi({ model, maxTokens, temperature = 0, system, messages, timeoutMs, logType, rawText = false, sessionInfo = null }) {
+    if (!model) throw new Error(`[AI:${logType}] model が未設定です。.env でモデルを指定してください。`)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
     const startTime = Date.now()
